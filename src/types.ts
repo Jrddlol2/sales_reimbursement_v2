@@ -83,6 +83,49 @@ export interface Mom {
   meeting_type?: string;
   participants_internal?: string;
   participants_external?: string;
+  // Phase 2 MDM: admin-configured dynamic fields (see FieldDefinition below),
+  // keyed by FieldDefinition.key. Additive — nothing reads/writes this until
+  // a field definition for entity 'mom' exists.
+  custom_fields?: Record<string, string>;
+}
+
+// Phase 2 MDM: admin-configurable form fields, rendered by
+// src/components/DynamicFieldRenderer.tsx wherever an entity's form opts in.
+// `entity` scopes a field to the form it appears on — only 'mom' is wired up
+// so far (Type of Account / Category / Contact Person Designation, replacing
+// the dead ClientMeetingDetails type), but the shape supports adding another
+// entity's forms later without a new mechanism.
+export type FieldInputType = 'text' | 'number' | 'dropdown' | 'date' | 'textarea';
+
+export interface FieldValidationRule {
+  minLength?: number;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  pattern?: string;
+}
+
+export interface FieldDefinition {
+  id: string;
+  entity: 'mom';
+  key: string;
+  label: string;
+  input_type: FieldInputType;
+  required: boolean;
+  active: boolean;
+  default_value?: string;
+  display_order: number;
+  // Only meaningful when input_type === 'dropdown'. Exactly one of
+  // `options` (static list) or `master_data_entity` (live-sourced from the
+  // Phase 1 Master Data catalogs) should be set.
+  options?: string[];
+  master_data_entity?: 'departments' | 'costCenters' | 'businessUnits' | 'branches' | 'projectCodes' | 'vendors';
+  // "Specify own value" fallback for a dropdown field, per CLAUDE.md's MOM
+  // field spec (Category / Company Name allow this; Type of Account doesn't).
+  allow_other?: boolean;
+  validation?: FieldValidationRule;
+  created_at: string;
+  updated_at: string;
 }
 
 export enum ReviewMeetingStatus {
@@ -128,18 +171,6 @@ export interface ExpenseLineItem {
   or_number?: string;
 }
 
-export interface ClientMeetingDetails {
-  type_of_account: string;
-  company_name: string;
-  purpose_of_meeting: string;
-  category: string;
-  location: string;
-  contact_person: string;
-  contact_person_designation: string;
-  contact_person_email: string;
-  description: string;
-}
-
 export interface Claim {
   id: string;
   claim_number?: string; // REIM-2026-000123
@@ -157,7 +188,6 @@ export interface Claim {
   payment_method?: string;
   release_code?: string;
   flagged_high_value?: boolean;
-  client_meeting_details?: ClientMeetingDetails;
   approved_at?: string;
   processed_by?: string;
   processing_date?: string;
@@ -194,14 +224,51 @@ export interface Approval {
   timestamp: string;
 }
 
-export interface StatusHistory {  id: string;  claim_id: string;  cash_advance_id?: string;  liquidation_id?: string;  delegation_id?: string;  user_id?: string;  old_status: string;  new_status: string;  changed_by: string;  changedBy?: User;  reason?: string;  timestamp: string;}
+export interface StatusHistory {  id: string;  claim_id: string;  cash_advance_id?: string;  liquidation_id?: string;  delegation_id?: string;  user_id?: string;  master_data_key?: string;  master_data_id?: string;  old_status: string;  new_status: string;  changed_by: string;  changedBy?: User;  reason?: string;  timestamp: string;}
 
 export interface Company {
   id: string;
   name: string;
   industry?: string;
   notes?: string;
+  // Phase 1 MDM enrichment — all optional, additive. Populates the "Company
+  // Auto-Fill" behavior (see docs/hierarchy-sync-design.md-style ADRs) once a
+  // form reads it; nothing reads these yet as of Phase 1.
+  address?: string;
+  business_unit_id?: string;
+  cost_center_id?: string;
+  default_department_id?: string;
+  currency?: string;
+  tax_id?: string;
+  // Informational reference only — e.g. "usual account owner for this
+  // client." Never read for claim approval routing, which is always derived
+  // from the requestor's reports_to / an active ApproverDelegation per
+  // CLAUDE.md's hard rule. No code path may branch on this field.
+  default_approver_id?: string;
 }
+
+// Shared shape for the generic Master Data catalog entities managed in the
+// Admin > Master Data module (server.ts's registerMasterDataRoutes). Each
+// entity below is intentionally a bare extension today (structurally
+// identical) so it can grow entity-specific fields later without disturbing
+// the others, and so each maps 1:1 to its own table if this ever becomes a
+// real Prisma-backed model.
+export interface MasterDataRecord {
+  id: string;
+  name: string;
+  code?: string;
+  active: boolean;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Department extends MasterDataRecord {}
+export interface CostCenter extends MasterDataRecord {}
+export interface BusinessUnit extends MasterDataRecord {}
+export interface Branch extends MasterDataRecord {}
+export interface ProjectCode extends MasterDataRecord {}
+export interface Vendor extends MasterDataRecord {}
 
 export interface Email {
   id: string;

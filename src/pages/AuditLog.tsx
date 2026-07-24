@@ -20,6 +20,7 @@ const getReferenceId = (log: any): string => {
   if (log.cash_advance_id) return `CADV-${log.cash_advance_id.substring(0, 8)}`;
   if (log.liquidation_id) return `LIQ-${log.liquidation_id.substring(0, 8)}`;
   if (log.delegation_id) return `DEL-${log.delegation_id.substring(0, 8)}`;
+  if (log.master_data_key) return `${log.master_data_key} · ${log.master_data_id.substring(0, 8)}`;
   return log.claim_id ? log.claim_id.substring(0, 8) : '—';
 };
 

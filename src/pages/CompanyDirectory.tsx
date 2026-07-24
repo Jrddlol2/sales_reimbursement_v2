@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
-import { Company } from '../types';
+import { Company, Department, BusinessUnit, CostCenter, User, UserRole } from '../types';
 import { useToast } from '../components/Toast';
 import { Pencil, X, Check, Plus, Buildings } from '@phosphor-icons/react';
 import { Pagination, usePagination } from '../components/Pagination';
@@ -9,9 +9,103 @@ interface EditState {
   name: string;
   industry: string;
   notes: string;
+  address: string;
+  business_unit_id: string;
+  cost_center_id: string;
+  default_department_id: string;
+  currency: string;
+  tax_id: string;
+  default_approver_id: string;
 }
 
-const emptyForm: EditState = { name: '', industry: '', notes: '' };
+const emptyForm: EditState = {
+  name: '', industry: '', notes: '',
+  address: '', business_unit_id: '', cost_center_id: '', default_department_id: '', currency: '', tax_id: '', default_approver_id: ''
+};
+
+const toCompanyBody = (f: EditState) => ({
+  name: f.name, industry: f.industry, notes: f.notes,
+  address: f.address || undefined,
+  business_unit_id: f.business_unit_id || undefined,
+  cost_center_id: f.cost_center_id || undefined,
+  default_department_id: f.default_department_id || undefined,
+  currency: f.currency || undefined,
+  tax_id: f.tax_id || undefined,
+  default_approver_id: f.default_approver_id || undefined,
+});
+
+// Phase 1 MDM enrichment fields, shared between the Add form and the
+// inline-edit row so both stay in sync as fields are added later.
+const CompanyEnrichmentFields: React.FC<{
+  values: EditState;
+  onChange: (patch: Partial<EditState>) => void;
+  businessUnits: BusinessUnit[];
+  costCenters: CostCenter[];
+  departments: Department[];
+  approvers: User[];
+  compact?: boolean;
+}> = ({ values, onChange, businessUnits, costCenters, departments, approvers, compact }) => {
+  const inputClass = compact
+    ? 'block w-full border border-gray-300 rounded px-2 py-1.5 text-xs'
+    : 'block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-brand focus:outline-none';
+  const labelClass = 'block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1';
+
+  return (
+    <div className="pt-3 border-t border-slate-100 space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div>
+          <label className={labelClass}>Address</label>
+          <input type="text" value={values.address} onChange={e => onChange({ address: e.target.value })} className={inputClass} placeholder="Optional" />
+        </div>
+        <div>
+          <label className={labelClass}>Currency</label>
+          <input type="text" value={values.currency} onChange={e => onChange({ currency: e.target.value })} className={inputClass} placeholder="e.g. PHP" />
+        </div>
+        <div>
+          <label className={labelClass}>Tax ID</label>
+          <input type="text" value={values.tax_id} onChange={e => onChange({ tax_id: e.target.value })} className={inputClass} placeholder="Optional" />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div>
+          <label className={labelClass}>Business Unit</label>
+          <select value={values.business_unit_id} onChange={e => onChange({ business_unit_id: e.target.value })} className={inputClass}>
+            <option value="">-- None --</option>
+            {businessUnits.map(bu => <option key={bu.id} value={bu.id}>{bu.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>Cost Center</label>
+          <select value={values.cost_center_id} onChange={e => onChange({ cost_center_id: e.target.value })} className={inputClass}>
+            <option value="">-- None --</option>
+            {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>Default Department</label>
+          <select value={values.default_department_id} onChange={e => onChange({ default_department_id: e.target.value })} className={inputClass}>
+            <option value="">-- None --</option>
+            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className={labelClass}>Default Approver (reference only — does not affect claim routing)</label>
+        <select
+          value={values.default_approver_id}
+          onChange={e => onChange({ default_approver_id: e.target.value })}
+          className={compact ? 'block w-full md:w-1/3 border border-gray-300 rounded px-2 py-1.5 text-xs' : 'block w-full md:w-1/3 border border-gray-300 rounded px-3 py-2 text-sm focus:border-brand focus:outline-none'}
+        >
+          <option value="">-- None --</option>
+          {approvers.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        <p className="mt-1 text-[10px] text-slate-400">
+          Informational only, e.g. the usual account owner for this client. A claim's actual approver always comes from the requestor's reporting manager.
+        </p>
+      </div>
+    </div>
+  );
+};
 
 export const CompanyDirectory: React.FC = () => {
   const toast = useToast();
@@ -23,6 +117,12 @@ export const CompanyDirectory: React.FC = () => {
   const [addForm, setAddForm] = useState<EditState>(emptyForm);
   const [saving, setSaving] = useState(false);
 
+  // Reference data for the enrichment fields — fetched once, not per-row.
+  const [businessUnits, setBusinessUnits] = useState<BusinessUnit[]>([]);
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [approvers, setApprovers] = useState<User[]>([]);
+
   const fetchCompanies = () => {
     setLoading(true);
     apiFetch('/api/companies').then(data => {
@@ -33,11 +133,24 @@ export const CompanyDirectory: React.FC = () => {
 
   useEffect(() => {
     fetchCompanies();
+    apiFetch('/api/master-data/all').then(data => {
+      setBusinessUnits(data.businessUnits || []);
+      setCostCenters(data.costCenters || []);
+      setDepartments(data.departments || []);
+    }).catch(() => {});
+    apiFetch('/api/users').then((data: User[]) => {
+      setApprovers(data.filter(u => u.role === UserRole.APPROVER));
+    }).catch(() => {});
   }, []);
 
   const startEdit = (c: Company) => {
     setEditingId(c.id);
-    setEditState({ name: c.name, industry: c.industry || '', notes: c.notes || '' });
+    setEditState({
+      name: c.name, industry: c.industry || '', notes: c.notes || '',
+      address: c.address || '', business_unit_id: c.business_unit_id || '', cost_center_id: c.cost_center_id || '',
+      default_department_id: c.default_department_id || '', currency: c.currency || '', tax_id: c.tax_id || '',
+      default_approver_id: c.default_approver_id || ''
+    });
   };
 
   const cancelEdit = () => {
@@ -51,7 +164,7 @@ export const CompanyDirectory: React.FC = () => {
     try {
       await apiFetch(`/api/companies/${c.id}`, {
         method: 'PUT',
-        body: JSON.stringify({ name: editState.name, industry: editState.industry, notes: editState.notes })
+        body: JSON.stringify(toCompanyBody(editState))
       });
       toast.success(`${editState.name} updated.`);
       cancelEdit();
@@ -70,7 +183,7 @@ export const CompanyDirectory: React.FC = () => {
     try {
       await apiFetch('/api/companies', {
         method: 'POST',
-        body: JSON.stringify({ name: addForm.name, industry: addForm.industry, notes: addForm.notes })
+        body: JSON.stringify(toCompanyBody(addForm))
       });
       toast.success(`${addForm.name} added to the directory.`);
       setAddForm(emptyForm);
@@ -157,6 +270,16 @@ export const CompanyDirectory: React.FC = () => {
               />
             </div>
           </div>
+
+          <CompanyEnrichmentFields
+            values={addForm}
+            onChange={patch => setAddForm({ ...addForm, ...patch })}
+            businessUnits={businessUnits}
+            costCenters={costCenters}
+            departments={departments}
+            approvers={approvers}
+          />
+
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -253,6 +376,17 @@ export const CompanyDirectory: React.FC = () => {
                               />
                             </div>
                           </div>
+
+                          <CompanyEnrichmentFields
+                            values={editState}
+                            onChange={patch => setEditState({ ...editState, ...patch })}
+                            businessUnits={businessUnits}
+                            costCenters={costCenters}
+                            departments={departments}
+                            approvers={approvers}
+                            compact
+                          />
+
                           <div className="flex justify-end gap-2 mt-3">
                             <button
                               onClick={cancelEdit}

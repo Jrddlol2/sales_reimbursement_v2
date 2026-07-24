@@ -30,6 +30,8 @@ import { SystemEmails } from './pages/SystemEmails';
 import { Receipts as ReceiptArchive } from './pages/ReceiptArchive';
 import { UserAccounts } from './pages/UserAccounts';
 import { CompanyDirectory } from './pages/CompanyDirectory';
+import { MasterDataAdmin } from './pages/MasterDataAdmin';
+import { FieldDefinitionsAdmin } from './pages/FieldDefinitionsAdmin';
 import { Moms } from './pages/Moms';
 import { Support } from "./pages/Support";
 import { SupportDetail } from "./pages/SupportDetail";
@@ -138,6 +140,8 @@ export default function App() {
                   <Route path="receipts" element={<ReceiptArchive />} />
                   <Route path="users" element={<UserAccounts />} />
                   <Route path="companies" element={<CompanyDirectory />} />
+                  <Route path="master-data" element={<MasterDataAdmin />} />
+                  <Route path="form-fields" element={<FieldDefinitionsAdmin />} />
                   {/* /notifications used to render its own copy of SystemEmails —
                       same page, second URL. Redirects to the one canonical
                       route instead of duplicating it. */}

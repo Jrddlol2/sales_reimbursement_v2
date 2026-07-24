@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 // Shared chrome for every dialog/drawer/lightbox in the app — one place that
 // owns z-index, backdrop color/opacity, Escape-to-close, and click-outside,
@@ -11,6 +12,17 @@ import React, { useEffect, useRef } from 'react';
 // Layout.tsx's navigational overlays (mobile sidebar, search/notif
 // dismiss-catchers) intentionally stay below both (40-70) — they're chrome,
 // not dialogs, and should never compete with a real modal for stacking order.
+//
+// All three render via a portal straight to document.body. Layout.tsx wraps
+// every routed page in a `position: relative; z-index: 1` div (for its own
+// page-fade-in animation) — that div establishes a stacking context, so
+// anything rendered as a normal descendant of it (which is where every
+// call site of Modal/Drawer/Lightbox lives, since they're invoked inline
+// from page components) has its z-index capped at that ancestor's priority
+// of 1, no matter what z-index it declares itself. A z-50 element elsewhere
+// on the page (e.g. the header's search box) then paints in front of it —
+// which is exactly what caused the "app header covers the top of the modal"
+// bug. Portaling to document.body escapes that ancestor entirely.
 
 const useEscapeToClose = (onClose: () => void) => {
   useEffect(() => {
@@ -57,7 +69,7 @@ export const Modal: React.FC<ModalProps> = ({
   useEscapeToClose(onClose);
   useReturnFocusOnUnmount();
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-900/40 flex items-center justify-center p-4">
       <div className="absolute inset-0" onClick={closeOnBackdropClick ? onClose : undefined} />
       {bare ? children : (
@@ -70,7 +82,8 @@ export const Modal: React.FC<ModalProps> = ({
           {children}
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -117,11 +130,12 @@ export const Drawer: React.FC<DrawerProps> = ({ onClose, children, closeOnBackdr
   useEscapeToClose(onClose);
   useReturnFocusOnUnmount();
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] overflow-hidden flex bg-slate-900/40">
       {closeOnBackdropClick && <div className="absolute inset-0" onClick={onClose} />}
       {children}
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -134,10 +148,11 @@ interface LightboxProps {
 export const Lightbox: React.FC<LightboxProps> = ({ onClose, children }) => {
   useEscapeToClose(onClose);
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={onClose} />
       {children}
-    </div>
+    </div>,
+    document.body
   );
 };

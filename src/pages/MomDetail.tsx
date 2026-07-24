@@ -12,6 +12,7 @@ import { Attachments } from '../components/Attachments';
 import { Comments } from '../components/Comments';
 import { getClaimNumber, getUploadUrl } from '../utils';
 import { Button } from '../components/ui/Button';
+import { FieldDefinition } from '../types';
 
 interface MomDetailProps {
   id?: string;
@@ -26,6 +27,7 @@ export const MomDetail: React.FC<MomDetailProps> = ({ id: propId, onClose }) => 
 
   const [mom, setMom] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fieldDefs, setFieldDefs] = useState<FieldDefinition[]>([]);
 
   const handleClose = onClose || (() => navigate(-1));
 
@@ -39,6 +41,10 @@ export const MomDetail: React.FC<MomDetailProps> = ({ id: propId, onClose }) => 
         toast.error('Failed to load Minutes of Meeting details');
       })
       .finally(() => setLoading(false));
+    // Fetches every field def (not just active ones) so a field an Admin
+    // later deactivates still shows its label on historical MOMs instead of
+    // falling back to a raw key.
+    apiFetch('/api/field-definitions?entity=mom').then(setFieldDefs).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -146,6 +152,27 @@ export const MomDetail: React.FC<MomDetailProps> = ({ id: propId, onClose }) => 
               </div>
             </div>
           </SummaryCard>
+
+          {/* DYNAMIC FIELDS (Phase 2 MDM) — only rendered when at least one
+              admin-configured field on this MOM actually has a value. */}
+          {(() => {
+            const entries = fieldDefs
+              .map(f => ({ label: f.label, value: mom.custom_fields?.[f.key] }))
+              .filter(e => e.value);
+            if (entries.length === 0) return null;
+            return (
+              <SummaryCard title="Additional Details">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  {entries.map(e => (
+                    <div key={e.label}>
+                      <span className="text-slate-400 block uppercase text-[10px] tracking-wider font-extrabold font-display">{e.label}</span>
+                      <span className="font-bold text-slate-800 block mt-1">{e.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </SummaryCard>
+            );
+          })()}
 
           {/* ATTACHMENTS */}
           <SummaryCard title="Attachments" bodyClassName="p-0">

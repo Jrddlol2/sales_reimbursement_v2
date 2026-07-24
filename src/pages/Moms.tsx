@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { Mom, MomStatus, MinutesSource, UserRole, Company } from '../types';
 import { useAuth } from '../components/AuthContext';
-import { uploadFile, getUploadUrl, formatDate } from '../utils';
+import { uploadFile, getUploadUrl, formatDate, generateMomSampleData, generateSampleCustomFieldValues } from '../utils';
 import { StatusBadge } from '../components/StatusBadge';
 import { 
   FileText, Plus, PaperPlaneRight, CheckCircle, Calendar, Clock, MapPin, 
@@ -14,6 +14,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useToast } from '../components/Toast';
 import { useConfirm } from '../components/ConfirmModal';
 import { Modal } from '../components/Modal';
+import { DynamicFieldRenderer } from '../components/DynamicFieldRenderer';
+import { useDynamicFields, getMissingRequiredFieldLabel } from '../hooks/useDynamicFields';
 
 export const Moms: React.FC = () => {
   const { user } = useAuth();
@@ -47,6 +49,9 @@ export const Moms: React.FC = () => {
   // Company Directory - Client (Company Name) picker
   const [companyDirectory, setCompanyDirectory] = useState<Company[]>([]);
   const [clientMode, setClientMode] = useState<'select' | 'custom'>('select');
+
+  const { definitions: fieldDefs, masterData } = useDynamicFields('mom');
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
 
   // Preview State
   const [previewMom, setPreviewMom] = useState<Mom | null>(null);
@@ -103,6 +108,7 @@ export const Moms: React.FC = () => {
     setMeetingType('');
     setParticipantsInternal('');
     setParticipantsExternal('');
+    setCustomFieldValues({});
     setCreationStep('choice');
   };
 
@@ -115,6 +121,23 @@ export const Moms: React.FC = () => {
 
   const handleChooseTemplate = () => {
     setCreationStep('template');
+  };
+
+  // Phase 3 MDM: Company Auto-Fill + cascading defaults — mirrors
+  // MomQuickCreateModal.tsx's applyCompanyDefaults. Only fills fields that
+  // are still empty, so it never overwrites something already typed.
+  const applyCompanyDefaults = (companyName: string) => {
+    const company = companyDirectory.find(c => c.name === companyName);
+    if (!company) return;
+    if (!location && company.address) setLocation(company.address);
+    if (masterData && company.default_department_id) {
+      const dept = masterData.departments.find(d => d.id === company.default_department_id);
+      if (dept) setCustomFieldValues(prev => (prev.department ? prev : { ...prev, department: dept.name }));
+    }
+    if (masterData && company.cost_center_id) {
+      const cc = masterData.costCenters.find(c2 => c2.id === company.cost_center_id);
+      if (cc) setCustomFieldValues(prev => (prev.cost_center ? prev : { ...prev, cost_center: cc.name }));
+    }
   };
 
   const handleChooseUpload = () => {
@@ -141,69 +164,26 @@ export const Moms: React.FC = () => {
     setMeetingType(mom.meeting_type || '');
     setParticipantsInternal(mom.participants_internal || '');
     setParticipantsExternal(mom.participants_external || '');
+    setCustomFieldValues(mom.custom_fields || {});
     setCreationStep('template');
   };
 
   const handleGenerateSampleData = () => {
-    const companies = [
-      'SM Prime Holdings', 'Ayala Land Inc', 'BDO Unibank', 'Jollibee Foods Corp', 'San Miguel Corporation', 'PLDT Inc', 'Globe Telecom',
-      'Google Philippines', 'Microsoft Asia', 'AWS Tech', 'Shopee Regional', 'Lazada eCommerce', 'Maya Bank', 'GCash Mobile',
-      'Makati Medical Center', 'St. Lukes Healthcare', 'Robinsons Retail', 'Cebu Pacific Air'
-    ];
-    const contacts = [
-      'Maria Santos', 'Carlos Dela Cruz', 'Angela Reyes', 'Ramon Villanueva', 'Patricia Lim',
-      'Kevin Ngo', 'Bianca Ocampo', 'Justin Chua', 'Samantha Go', 'Luis Torres'
-    ];
-    const platforms = ['MS Teams', 'Zoom', 'Quezon City HQ', 'Makati Diamond Residences', 'BGC Office', 'Ortigas Center Room A', 'Google Meet'];
-    const purposes = [
-      'Quarterly Business Review', 'Renewal Negotiation', 'Pilot Scope Definition', 
-      'Service Level Agreement Sync', 'Q4 Partnership Planning', 'Vendor Security Assessment',
-      'Product Demo & Onboarding', 'Contract Renegotiation', 'Go-To-Market Strategy Alignment'
-    ];
-    const discussions = [
-      'Reviewed previous quarter metrics and discussed the roadmap for the upcoming renewal. Client raised concerns about SLA response times which we addressed by proposing a dedicated support tier.',
-      'Presented the new product catalog. Client is interested in the enterprise bundle but needs a custom pricing model to fit their Q3 budget.',
-      'Walked through the pilot implementation plan. Clarified the integration requirements with their existing on-premise infrastructure.',
-      'Discussed co-marketing opportunities for the upcoming product launch. Client requested a detailed breakdown of the proposed budget allocation.',
-      'Follow-up meeting to finalize the terms of the service agreement. Addressed legal redlines and agreed on the liability clauses.',
-      'Conducted a thorough security assessment for vendor onboarding. Clarified data residency policies and encryption protocols.',
-      'Showcased the new analytics dashboard. The executive team was highly engaged and requested a 14-day proof of concept for their marketing department.',
-      'Negotiated pricing tiers for the upcoming fiscal year. Client asked for volume discounts on license renewals which we will review internally.'
-    ];
-    const items = [
-      '1. Send revised pricing proposal by Friday\n2. Schedule technical deep-dive next week',
-      '1. Provide SLA documentation\n2. Draft pilot contract',
-      '1. Confirm marketing budget\n2. Share creative assets',
-      '1. Review legal redlines with internal counsel\n2. Send finalized contract for signature',
-      '1. Setup demo environment for client engineering team\n2. Share API documentation',
-      '1. Provide SOC2 compliance report\n2. Answer remaining security questionnaire items',
-      '1. Provision POC accounts for 5 users\n2. Share onboarding guides',
-      '1. Calculate volume discount models\n2. Schedule follow-up with finance directors'
-    ];
-
-    const rand = (arr: any[]) => arr[Math.floor(Math.random() * arr.length)];
-    
-    const clientName = rand(companies);
-    const contactName = rand(contacts);
-    const [first, ...rest] = contactName.split(' ');
-    const last = rest[rest.length - 1] || first;
-    
-    // Random date within last 30 days
-    const d = new Date();
-    d.setDate(d.getDate() - Math.floor(Math.random() * 30));
-
-    const isKnownCompany = companyDirectory.some(c => c.name.toLowerCase() === clientName.toLowerCase());
+    const sample = generateMomSampleData();
+    const isKnownCompany = companyDirectory.some(c => c.name.toLowerCase() === sample.client.toLowerCase());
     setClientMode(isKnownCompany ? 'select' : 'custom');
-    setClient(clientName);
-    setContactPerson(contactName);
-    setContactPersonEmail(`${first.toLowerCase()}.${last.toLowerCase()}@${clientName.replace(/[^a-zA-Z]/g, '').toLowerCase()}.com`);
-    setMeetingDate(d.toISOString().split('T')[0]);
-    setMeetingTime(`${String(Math.floor(Math.random() * 7) + 9).padStart(2, '0')}:00`);
-    setLocation(rand(platforms));
-    setPurpose(rand(purposes));
-    setDiscussion(rand(discussions));
-    setAgreements('Agreed to proceed with the next steps as discussed. Client will review proposals internally and revert by end of week.');
-    setActionItems(rand(items));
+    setClient(sample.client);
+    setContactPerson(sample.contactPerson);
+    setContactPersonEmail(sample.contactPersonEmail);
+    setMeetingDate(sample.meetingDate);
+    setMeetingTime(sample.meetingTime);
+    setLocation(sample.location);
+    setPurpose(sample.purpose);
+    setDiscussion(sample.discussion);
+    setAgreements(sample.agreements);
+    setActionItems(sample.actionItems);
+    setCustomFieldValues(generateSampleCustomFieldValues(fieldDefs, masterData as any));
+    if (isKnownCompany) applyCompanyDefaults(sample.client);
   };
 
   const handleSaveDraft = async (e: React.FormEvent) => {
@@ -223,7 +203,8 @@ export const Moms: React.FC = () => {
         file_name: fileName,
         file_url: fileUrl || undefined,
         status: MomStatus.DRAFT,
-        minutes_source: MinutesSource.TEMPLATE
+        minutes_source: MinutesSource.TEMPLATE,
+        custom_fields: customFieldValues
       };
 
       if (editingMom) {
@@ -266,6 +247,11 @@ export const Moms: React.FC = () => {
       toast.error('Please fill out all required fields to complete the MOM.');
       return;
     }
+    const missingDynamicField = getMissingRequiredFieldLabel(fieldDefs, customFieldValues);
+    if (missingDynamicField) {
+      toast.error(`${missingDynamicField} is required.`);
+      return;
+    }
 
     try {
       // Save first
@@ -283,7 +269,8 @@ export const Moms: React.FC = () => {
         file_name: fileName,
         file_url: fileUrl || undefined,
         status: MomStatus.DRAFT,
-        minutes_source: MinutesSource.TEMPLATE
+        minutes_source: MinutesSource.TEMPLATE,
+        custom_fields: customFieldValues
       };
 
       let savedMom;
@@ -898,6 +885,7 @@ export const Moms: React.FC = () => {
                       } else {
                         setClientMode('select');
                         setClient(e.target.value);
+                        applyCompanyDefaults(e.target.value);
                       }
                     }}
                     className="block w-full text-sm border border-gray-300 rounded px-3 py-2 focus:border-brand focus:outline-none bg-white"
@@ -933,6 +921,18 @@ export const Moms: React.FC = () => {
                 </div>
               </div>
 
+              {(() => {
+                const selectedCompany = clientMode === 'select' ? companyDirectory.find(c => c.name === client) : undefined;
+                const bu = selectedCompany?.business_unit_id && masterData?.businessUnits.find(b => b.id === selectedCompany.business_unit_id)?.name;
+                const chips = [bu && `BU: ${bu}`, selectedCompany?.currency && `Currency: ${selectedCompany.currency}`, selectedCompany?.tax_id && `Tax ID: ${selectedCompany.tax_id}`].filter(Boolean);
+                if (chips.length === 0) return null;
+                return (
+                  <div className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded px-3 py-2">
+                    <span className="font-semibold text-slate-600">From company record:</span> {chips.join(' · ')}
+                  </div>
+                );
+              })()}
+
               <div>
                 <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Contact Person Email *</label>
                 <input
@@ -944,6 +944,13 @@ export const Moms: React.FC = () => {
                   className="block w-full text-sm border border-gray-300 rounded px-3 py-2 focus:border-brand focus:outline-none"
                 />
               </div>
+
+              <DynamicFieldRenderer
+                definitions={fieldDefs}
+                values={customFieldValues}
+                onChange={(key, value) => setCustomFieldValues(prev => ({ ...prev, [key]: value }))}
+                masterData={masterData}
+              />
 
               {/* Grid 2: Meeting Scheduling details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

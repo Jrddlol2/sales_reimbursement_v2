@@ -100,6 +100,111 @@ export const getUploadUrl = (url?: string | null): string => {
 
 export const IS_DEMO_MODE = (import.meta as any).env?.VITE_IS_DEMO_MODE !== 'false';
 
+// Shared by every MOM-creation form (MomQuickCreateModal.tsx, Moms.tsx's
+// "Create Minutes in System" template) so "Fill with Sample Data" produces
+// the same quality of demo content everywhere instead of each form keeping
+// its own copy-pasted word lists that drift apart.
+export interface MomSampleData {
+  client: string;
+  contactPerson: string;
+  contactPersonEmail: string;
+  meetingDate: string;
+  meetingTime: string;
+  location: string;
+  purpose: string;
+  discussion: string;
+  agreements: string;
+  actionItems: string;
+}
+
+export const generateMomSampleData = (): MomSampleData => {
+  const companies = [
+    'SM Prime Holdings', 'Ayala Land Inc', 'BDO Unibank', 'Jollibee Foods Corp', 'San Miguel Corporation', 'PLDT Inc', 'Globe Telecom',
+    'Google Philippines', 'Microsoft Asia', 'AWS Tech', 'Shopee Regional', 'Lazada eCommerce', 'Maya Bank', 'GCash Mobile',
+    'Makati Medical Center', 'St. Lukes Healthcare', 'Robinsons Retail', 'Cebu Pacific Air'
+  ];
+  const contacts = [
+    'Maria Santos', 'Carlos Dela Cruz', 'Angela Reyes', 'Ramon Villanueva', 'Patricia Lim',
+    'Kevin Ngo', 'Bianca Ocampo', 'Justin Chua', 'Samantha Go', 'Luis Torres'
+  ];
+  const platforms = ['MS Teams', 'Zoom', 'Quezon City HQ', 'Makati Diamond Residences', 'BGC Office', 'Ortigas Center Room A', 'Google Meet'];
+  const purposes = [
+    'Quarterly Business Review', 'Renewal Negotiation', 'Pilot Scope Definition',
+    'Service Level Agreement Sync', 'Q4 Partnership Planning', 'Vendor Security Assessment',
+    'Product Demo & Onboarding', 'Contract Renegotiation', 'Go-To-Market Strategy Alignment'
+  ];
+  const discussions = [
+    'Reviewed previous quarter metrics and discussed the roadmap for the upcoming renewal. Client raised concerns about SLA response times which we addressed by proposing a dedicated support tier.',
+    'Presented the new product catalog. Client is interested in the enterprise bundle but needs a custom pricing model to fit their Q3 budget.',
+    'Walked through the pilot implementation plan. Clarified the integration requirements with their existing on-premise infrastructure.',
+    'Discussed co-marketing opportunities for the upcoming product launch. Client requested a detailed breakdown of the proposed budget allocation.',
+    'Follow-up meeting to finalize the terms of the service agreement. Addressed legal redlines and agreed on the liability clauses.',
+    'Conducted a thorough security assessment for vendor onboarding. Clarified data residency policies and encryption protocols.',
+    'Showcased the new analytics dashboard. The executive team was highly engaged and requested a 14-day proof of concept for their marketing department.',
+    'Negotiated pricing tiers for the upcoming fiscal year. Client asked for volume discounts on license renewals which we will review internally.'
+  ];
+  const items = [
+    '1. Send revised pricing proposal by Friday\n2. Schedule technical deep-dive next week',
+    '1. Provide SLA documentation\n2. Draft pilot contract',
+    '1. Confirm marketing budget\n2. Share creative assets',
+    '1. Review legal redlines with internal counsel\n2. Send finalized contract for signature',
+    '1. Setup demo environment for client engineering team\n2. Share API documentation',
+    '1. Provide SOC2 compliance report\n2. Answer remaining security questionnaire items',
+    '1. Provision POC accounts for 5 users\n2. Share onboarding guides',
+    '1. Calculate volume discount models\n2. Schedule follow-up with finance directors'
+  ];
+
+  const rand = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
+  const clientName = rand(companies);
+  const contactName = rand(contacts);
+  const [first, ...rest] = contactName.split(' ');
+  const last = rest[rest.length - 1] || first;
+
+  const d = new Date();
+  d.setDate(d.getDate() - Math.floor(Math.random() * 30));
+
+  return {
+    client: clientName,
+    contactPerson: contactName,
+    contactPersonEmail: `${first.toLowerCase()}.${last.toLowerCase()}@${clientName.replace(/[^a-zA-Z]/g, '').toLowerCase()}.com`,
+    meetingDate: d.toISOString().split('T')[0],
+    meetingTime: `${String(Math.floor(Math.random() * 7) + 9).padStart(2, '0')}:00`,
+    location: rand(platforms),
+    purpose: rand(purposes),
+    discussion: rand(discussions),
+    agreements: 'Agreed to proceed with the next steps as discussed. Client will review proposals internally and revert by end of week.',
+    actionItems: rand(items),
+  };
+};
+
+// Randomizes admin-configured dynamic fields for the "Fill with Sample Data"
+// action — generic over whatever fields exist today or get added later, so
+// the sample-data generator never needs updating when an Admin adds a field.
+export const generateSampleCustomFieldValues = (
+  definitions: { key: string; input_type: string; label: string; options?: string[]; master_data_entity?: string }[],
+  masterData?: Record<string, { name: string; active: boolean }[]>
+): Record<string, string> => {
+  const values: Record<string, string> = {};
+  definitions.forEach(f => {
+    if (f.input_type === 'dropdown') {
+      const options = f.master_data_entity && masterData
+        ? masterData[f.master_data_entity].filter(r => r.active).map(r => r.name)
+        : (f.options || []);
+      if (options.length > 0) values[f.key] = options[Math.floor(Math.random() * options.length)];
+    } else if (f.input_type === 'number') {
+      values[f.key] = String(Math.floor(Math.random() * 100));
+    } else if (f.input_type === 'date') {
+      values[f.key] = new Date().toISOString().split('T')[0];
+    } else if (f.input_type === 'textarea') {
+      values[f.key] = `Sample details for ${f.label.toLowerCase()}.`;
+    } else {
+      values[f.key] = `Sample ${f.label}`;
+    }
+  });
+  return values;
+};
+
 // Shared by TransactionHistory and MyRequests — both export the same shape
 // of unified request row, so the CSV-building logic lives in one place
 // instead of two copies that could format columns differently over time.

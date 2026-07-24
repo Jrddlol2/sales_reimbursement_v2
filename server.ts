@@ -10,7 +10,9 @@ import {
   CashAdvance, CashAdvanceStatus, Liquidation, LiquidationStatus,
   LiquidationVarianceType, LiquidationLineItem,
   ReviewMeeting, ReviewMeetingStatus, Company, SupportRequest, SupportRequestMessage, SupportRequestStatus, SupportRequestPriority, ImportBatch,
-  ApproverDelegation, DelegationStatus
+  ApproverDelegation, DelegationStatus,
+  MasterDataRecord, Department, CostCenter, BusinessUnit, Branch, ProjectCode, Vendor,
+  FieldDefinition
 } from './src/types';
 
 const LIQUIDATION_DEADLINE_DAYS = 7;
@@ -99,6 +101,104 @@ const getOrCreateCompany = (name?: string | null): void => {
     companies.push({ id: uuidv4(), name: trimmed });
   }
 };
+
+// ===== Master Data (Phase 1 MDM) =====
+// Generic catalog-style reference data, managed through
+// registerMasterDataRoutes() (defined inside startServer(), alongside
+// getUser/addUserHistory) rather than bespoke per-entity route blocks, so
+// adding a 7th master-data type later is a config addition, not a new route
+// set. There is deliberately no DELETE route for any of these — historical
+// Claims/MOMs/Companies may reference a record by id, so deactivation
+// (PUT { active: false }) is the only removal path.
+const buildMasterDataSeed = (items: { name: string; code?: string }[]): MasterDataRecord[] => {
+  const now = new Date().toISOString();
+  return items.map(i => ({ id: uuidv4(), name: i.name, code: i.code, active: true, created_at: now, updated_at: now }));
+};
+
+const SEED_DEPARTMENTS = ['Sales', 'Marketing', 'Engineering', 'Operations', 'Finance', 'IT', 'Executive'].map(name => ({ name }));
+const SEED_COST_CENTERS = [
+  { name: 'Sales Ops', code: 'CC-100' },
+  { name: 'Marketing', code: 'CC-200' },
+  { name: 'Engineering', code: 'CC-300' },
+  { name: 'Corporate', code: 'CC-400' },
+];
+const SEED_BUSINESS_UNITS = ['Enterprise Sales', 'SMB Sales', 'Client Services', 'Corporate'].map(name => ({ name }));
+const SEED_BRANCHES = [
+  { name: 'Manila HQ', code: 'MNL-01' },
+  { name: 'Cebu Branch', code: 'CEB-01' },
+  { name: 'Davao Branch', code: 'DVO-01' },
+];
+const SEED_PROJECT_CODES = [
+  { name: 'General', code: 'PRJ-GENERAL' },
+  { name: 'New Business', code: 'PRJ-NEWBIZ' },
+  { name: 'Renewal', code: 'PRJ-RENEWAL' },
+];
+const SEED_VENDORS = ['Grab', 'Petron', 'Starbucks', 'PLDT'].map(name => ({ name }));
+
+const buildInitialDepartments = (): Department[] => buildMasterDataSeed(SEED_DEPARTMENTS);
+const buildInitialCostCenters = (): CostCenter[] => buildMasterDataSeed(SEED_COST_CENTERS);
+const buildInitialBusinessUnits = (): BusinessUnit[] => buildMasterDataSeed(SEED_BUSINESS_UNITS);
+const buildInitialBranches = (): Branch[] => buildMasterDataSeed(SEED_BRANCHES);
+const buildInitialProjectCodes = (): ProjectCode[] => buildMasterDataSeed(SEED_PROJECT_CODES);
+const buildInitialVendors = (): Vendor[] => buildMasterDataSeed(SEED_VENDORS);
+
+let departments: Department[] = buildInitialDepartments();
+let costCenters: CostCenter[] = buildInitialCostCenters();
+let businessUnits: BusinessUnit[] = buildInitialBusinessUnits();
+let branches: Branch[] = buildInitialBranches();
+let projectCodes: ProjectCode[] = buildInitialProjectCodes();
+let vendors: Vendor[] = buildInitialVendors();
+
+// ===== Dynamic Field Definitions (Phase 2 MDM) =====
+// Admin-configurable fields rendered on a form via
+// src/components/DynamicFieldRenderer.tsx. Seeded here with the three MOM
+// fields CLAUDE.md's spec calls for but that were never actually built
+// (Type of Account, Category, Contact Person Designation) — the dead
+// ClientMeetingDetails type they used to (theoretically) live in has been
+// removed from src/types.ts in favor of this mechanism. All three are seeded
+// as NOT required, so existing MOM-creation flows (and the Playwright suite's
+// MOM-mandatory test) are unaffected until an Admin opts to require one.
+const buildInitialFieldDefinitions = (): FieldDefinition[] => {
+  const now = new Date().toISOString();
+  const defs: Omit<FieldDefinition, 'id' | 'created_at' | 'updated_at'>[] = [
+    {
+      entity: 'mom', key: 'type_of_account', label: 'Type of Account', input_type: 'dropdown',
+      required: false, active: true, display_order: 1,
+      options: ['Existing Client', 'Prospective Client / Lead', 'Partner / Distributor', 'Internal / Other'],
+    },
+    {
+      entity: 'mom', key: 'category', label: 'Category', input_type: 'dropdown',
+      required: false, active: true, display_order: 2,
+      options: ['Sales Call', 'Client Servicing', 'Business Review', 'Contract/Negotiation', 'Other'],
+      allow_other: true,
+    },
+    {
+      entity: 'mom', key: 'contact_person_designation', label: 'Contact Person Designation', input_type: 'text',
+      required: false, active: true, display_order: 3,
+    },
+    // Phase 3 MDM: cascading Company -> Department -> Cost Center -> Project.
+    // These are ordinary dynamic fields sourced live from the Phase 1 Master
+    // Data catalogs (rather than a hardcoded option list) — selecting a
+    // Company with a matching default pre-fills these (see the MOM forms'
+    // company-select handler), but they stay user-editable dropdowns, since
+    // Master Data has no formal parent/child linkage to filter options by.
+    {
+      entity: 'mom', key: 'department', label: 'Department', input_type: 'dropdown',
+      required: false, active: true, display_order: 4, master_data_entity: 'departments',
+    },
+    {
+      entity: 'mom', key: 'cost_center', label: 'Cost Center', input_type: 'dropdown',
+      required: false, active: true, display_order: 5, master_data_entity: 'costCenters',
+    },
+    {
+      entity: 'mom', key: 'project_code', label: 'Project Code', input_type: 'dropdown',
+      required: false, active: true, display_order: 6, master_data_entity: 'projectCodes',
+    },
+  ];
+  return defs.map(d => ({ ...d, id: uuidv4(), created_at: now, updated_at: now }));
+};
+
+let fieldDefinitions: FieldDefinition[] = buildInitialFieldDefinitions();
 
 // The standard demo org chart: two full approval chains (Bob<-Alice,Eve and
 // Grace<-Frank,Henry) so Admin Reassignment always has a second Approver to
@@ -397,6 +497,247 @@ async function startServer() {
     });
   };
 
+  // Master Data (Phase 1 MDM) — one history helper shared by every entity's
+  // route factory below, following the exact same "push into statusHistories,
+  // one call per meaningfully-changed field" shape as addUserHistory.
+  const addMasterDataHistory = (entityKey: string, recordId: string, field: string, oldVal: string, newVal: string, changedBy: string) => {
+    statusHistories.push({
+      id: uuidv4(),
+      claim_id: '',
+      master_data_key: entityKey,
+      master_data_id: recordId,
+      old_status: `${field}: ${oldVal}`,
+      new_status: `${field}: ${newVal}`,
+      changed_by: changedBy,
+      reason: `Changed ${entityKey} ${field}`,
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  interface MasterDataEntityConfig<T extends MasterDataRecord> {
+    key: string;   // used in the URL, e.g. 'departments'
+    label: string; // used in error messages, e.g. 'Department'
+    store: () => T[];
+    validateFields: (body: any, existing: T[], editingId?: string) => { errors: string[]; fields: Partial<T> };
+  }
+
+  // Generalizes the /api/companies CRUD pattern (name required + case-
+  // insensitive uniqueness, Admin-only write, any-authenticated-user read)
+  // into one reusable route factory, so a future master-data type is a ~15
+  // line config block instead of a new copy-pasted route set. Auth is not
+  // abstracted away — every route below still explicitly re-checks
+  // user.role === ADMIN inline, matching every other write route in this file.
+  const registerMasterDataRoutes = <T extends MasterDataRecord>(config: MasterDataEntityConfig<T>) => {
+    const base = `/api/master-data/${config.key}`;
+
+    app.get(base, (req, res) => {
+      const user = getUser(req);
+      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      res.json([...config.store()].sort((a, b) => a.name.localeCompare(b.name)));
+    });
+
+    app.post(base, (req, res) => {
+      const user = getUser(req);
+      if (!user || user.role !== UserRole.ADMIN) return res.status(403).json({ error: 'Forbidden' });
+
+      const { errors, fields } = config.validateFields(req.body, config.store());
+      if (errors.length) return res.status(400).json({ error: errors[0] });
+
+      const now = new Date().toISOString();
+      const record = { id: uuidv4(), active: true, created_at: now, updated_at: now, ...fields } as T;
+      config.store().push(record);
+      res.json(record);
+    });
+
+    app.put(`${base}/:id`, (req, res) => {
+      const user = getUser(req);
+      if (!user || user.role !== UserRole.ADMIN) return res.status(403).json({ error: 'Forbidden' });
+
+      const record = config.store().find(r => r.id === req.params.id);
+      if (!record) return res.status(404).json({ error: `${config.label} not found` });
+
+      const { errors, fields } = config.validateFields(req.body, config.store(), req.params.id);
+      if (errors.length) return res.status(400).json({ error: errors[0] });
+
+      (Object.entries(fields) as [keyof T, any][]).forEach(([field, value]) => {
+        if (value !== undefined && record[field] !== value) {
+          addMasterDataHistory(config.key, record.id, String(field), String(record[field]), String(value), user.id);
+          record[field] = value;
+        }
+      });
+      record.updated_at = new Date().toISOString();
+      res.json(record);
+    });
+  };
+
+  // Shared validation for the six uniform catalog entities: name required,
+  // case-insensitive unique among active+inactive records, code/notes/active
+  // pass through untouched. Each registerMasterDataRoutes() call below is
+  // still its own explicit config — nothing here hides an entity's rules.
+  const validateNamedCatalogEntity = <T extends MasterDataRecord>(label: string) =>
+    (body: any, existing: T[], editingId?: string): { errors: string[]; fields: Partial<T> } => {
+      const errors: string[] = [];
+      const fields: Partial<T> = {};
+      if (body.name !== undefined) {
+        const trimmed = String(body.name).trim();
+        if (!trimmed) errors.push(`${label} name is required.`);
+        else if (existing.some(r => r.id !== editingId && r.name.toLowerCase() === trimmed.toLowerCase())) {
+          errors.push(`A ${label.toLowerCase()} with this name already exists.`);
+        } else {
+          (fields as any).name = trimmed;
+        }
+      }
+      if (body.code !== undefined) (fields as any).code = body.code ? String(body.code).trim() : undefined;
+      if (body.notes !== undefined) (fields as any).notes = body.notes;
+      if (body.active !== undefined) (fields as any).active = !!body.active;
+      return { errors, fields };
+    };
+
+  registerMasterDataRoutes<Department>({
+    key: 'departments', label: 'Department',
+    store: () => departments,
+    validateFields: validateNamedCatalogEntity('Department'),
+  });
+  registerMasterDataRoutes<CostCenter>({
+    key: 'cost-centers', label: 'Cost Center',
+    store: () => costCenters,
+    validateFields: validateNamedCatalogEntity('Cost Center'),
+  });
+  registerMasterDataRoutes<BusinessUnit>({
+    key: 'business-units', label: 'Business Unit',
+    store: () => businessUnits,
+    validateFields: validateNamedCatalogEntity('Business Unit'),
+  });
+  registerMasterDataRoutes<Branch>({
+    key: 'branches', label: 'Branch',
+    store: () => branches,
+    validateFields: validateNamedCatalogEntity('Branch'),
+  });
+  registerMasterDataRoutes<ProjectCode>({
+    key: 'project-codes', label: 'Project Code',
+    store: () => projectCodes,
+    validateFields: validateNamedCatalogEntity('Project Code'),
+  });
+  registerMasterDataRoutes<Vendor>({
+    key: 'vendors', label: 'Vendor',
+    store: () => vendors,
+    validateFields: validateNamedCatalogEntity('Vendor'),
+  });
+
+  // Aggregate fetch — lets a form (or the Admin module's landing page) load
+  // every catalog in one call instead of six, and is what Phase 3's
+  // cascading-dropdown/company-autofill wiring will consume.
+  app.get('/api/master-data/all', (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    res.json({
+      departments: [...departments].sort((a, b) => a.name.localeCompare(b.name)),
+      costCenters: [...costCenters].sort((a, b) => a.name.localeCompare(b.name)),
+      businessUnits: [...businessUnits].sort((a, b) => a.name.localeCompare(b.name)),
+      branches: [...branches].sort((a, b) => a.name.localeCompare(b.name)),
+      projectCodes: [...projectCodes].sort((a, b) => a.name.localeCompare(b.name)),
+      vendors: [...vendors].sort((a, b) => a.name.localeCompare(b.name)),
+    });
+  });
+
+  // ===== Field Definitions (Phase 2 MDM) =====
+  // Admin-configurable form fields. Read is open to any authenticated user
+  // (a Requestor needs the active field list to render the MOM form); writes
+  // are Admin-only, same split as every other master-data/config route.
+  const VALID_INPUT_TYPES = new Set(['text', 'number', 'dropdown', 'date', 'textarea']);
+  const VALID_MASTER_DATA_ENTITIES = new Set(['departments', 'costCenters', 'businessUnits', 'branches', 'projectCodes', 'vendors']);
+
+  app.get('/api/field-definitions', (req, res) => {
+    const user = getUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const entity = req.query.entity as string | undefined;
+    const list = entity ? fieldDefinitions.filter(f => f.entity === entity) : fieldDefinitions;
+    res.json([...list].sort((a, b) => a.display_order - b.display_order));
+  });
+
+  const validateFieldDefinitionBody = (body: any, existing: FieldDefinition[], editingId?: string): string | null => {
+    if (body.key !== undefined) {
+      const key = String(body.key).trim();
+      if (!key) return 'Field key is required.';
+      if (!/^[a-z][a-z0-9_]*$/.test(key)) return 'Field key must be lowercase letters, numbers, and underscores, starting with a letter.';
+      if (existing.some(f => f.id !== editingId && f.entity === (body.entity || existing.find(e => e.id === editingId)?.entity) && f.key === key)) {
+        return 'A field with this key already exists for this form.';
+      }
+    }
+    if (body.label !== undefined && !String(body.label).trim()) return 'Field label is required.';
+    if (body.input_type !== undefined && !VALID_INPUT_TYPES.has(body.input_type)) return `Input type must be one of: ${[...VALID_INPUT_TYPES].join(', ')}.`;
+    if (body.master_data_entity !== undefined && body.master_data_entity !== null && !VALID_MASTER_DATA_ENTITIES.has(body.master_data_entity)) {
+      return `Master data source must be one of: ${[...VALID_MASTER_DATA_ENTITIES].join(', ')}.`;
+    }
+    if (body.display_order !== undefined && typeof body.display_order !== 'number') return 'Display order must be a number.';
+    return null;
+  };
+
+  app.post('/api/field-definitions', (req, res) => {
+    const user = getUser(req);
+    if (!user || user.role !== UserRole.ADMIN) return res.status(403).json({ error: 'Forbidden' });
+
+    if (!req.body.key || !req.body.label || !req.body.input_type || !req.body.entity) {
+      return res.status(400).json({ error: 'entity, key, label, and input_type are required.' });
+    }
+    const validationError = validateFieldDefinitionBody(req.body, fieldDefinitions);
+    if (validationError) return res.status(400).json({ error: validationError });
+
+    const now = new Date().toISOString();
+    const def: FieldDefinition = {
+      id: uuidv4(),
+      entity: req.body.entity,
+      key: String(req.body.key).trim(),
+      label: String(req.body.label).trim(),
+      input_type: req.body.input_type,
+      required: !!req.body.required,
+      active: req.body.active !== undefined ? !!req.body.active : true,
+      default_value: req.body.default_value || undefined,
+      display_order: typeof req.body.display_order === 'number' ? req.body.display_order : fieldDefinitions.length + 1,
+      options: Array.isArray(req.body.options) ? req.body.options : undefined,
+      master_data_entity: req.body.master_data_entity || undefined,
+      allow_other: !!req.body.allow_other,
+      validation: req.body.validation || undefined,
+      created_at: now,
+      updated_at: now,
+    };
+    fieldDefinitions.push(def);
+    res.json(def);
+  });
+
+  app.put('/api/field-definitions/:id', (req, res) => {
+    const user = getUser(req);
+    if (!user || user.role !== UserRole.ADMIN) return res.status(403).json({ error: 'Forbidden' });
+
+    const def = fieldDefinitions.find(f => f.id === req.params.id);
+    if (!def) return res.status(404).json({ error: 'Field definition not found' });
+
+    const validationError = validateFieldDefinitionBody(req.body, fieldDefinitions, def.id);
+    if (validationError) return res.status(400).json({ error: validationError });
+
+    (['key', 'label', 'input_type', 'required', 'active', 'default_value', 'display_order', 'options', 'master_data_entity', 'allow_other', 'validation'] as const)
+      .forEach(field => {
+        const value = req.body[field];
+        if (value !== undefined && JSON.stringify((def as any)[field]) !== JSON.stringify(value)) {
+          addMasterDataHistory('field-definitions', def.id, field, JSON.stringify((def as any)[field] ?? null), JSON.stringify(value), user.id);
+          (def as any)[field] = value;
+        }
+      });
+    def.updated_at = new Date().toISOString();
+    res.json(def);
+  });
+
+  // Shared by any route that saves an entity with dynamic custom_fields
+  // (currently just MOM) — returns an error message naming the first missing
+  // required+active field, or null if satisfied. Enforced server-side, not
+  // just in the form, since an Admin can flip a field to required at any time.
+  const validateRequiredCustomFields = (entity: FieldDefinition['entity'], customFields: Record<string, string> | undefined): string | null => {
+    const missing = fieldDefinitions.find(f =>
+      f.entity === entity && f.active && f.required && !(customFields && String(customFields[f.key] ?? '').trim())
+    );
+    return missing ? `${missing.label} is required.` : null;
+  };
+
   // Lazily flips any Active delegation whose end_date has passed to Expired.
   // No scheduler exists in this prototype, so this runs on every read/use of
   // the delegations list instead - self-healing rather than time-driven.
@@ -645,17 +986,29 @@ If no action is taken within ${STALE_APPROVER_FALLBACK_DAYS} days, this will be 
     const user = getUser(req);
     if (!user || user.role !== UserRole.ADMIN) return res.status(403).json({ error: 'Forbidden' });
 
-    const { name, industry, notes } = req.body;
+    const {
+      name, industry, notes,
+      address, business_unit_id, cost_center_id, default_department_id, currency, tax_id, default_approver_id
+    } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Company name is required.' });
     if (companies.some(c => c.name.toLowerCase() === name.trim().toLowerCase())) {
       return res.status(400).json({ error: 'A company with this name already exists.' });
     }
 
-    const company: Company = { id: uuidv4(), name: name.trim(), industry, notes };
+    const company: Company = {
+      id: uuidv4(), name: name.trim(), industry, notes,
+      address, business_unit_id, cost_center_id, default_department_id, currency, tax_id, default_approver_id
+    };
     companies.push(company);
     res.json(company);
   });
 
+  // Phase 1 MDM enrichment fields below (address/business_unit_id/etc.) are
+  // additive to the pre-existing name/industry/notes fields — see
+  // src/types.ts's Company interface. default_approver_id is informational
+  // reference data ONLY: it must never be read by claim approval routing,
+  // which stays 100% derived from requestor.reports_to / an active
+  // ApproverDelegation, per CLAUDE.md's segregation-of-duties rule.
   app.put('/api/companies/:id', (req, res) => {
     const user = getUser(req);
     if (!user || user.role !== UserRole.ADMIN) return res.status(403).json({ error: 'Forbidden' });
@@ -666,10 +1019,22 @@ If no action is taken within ${STALE_APPROVER_FALLBACK_DAYS} days, this will be 
     const { name, industry, notes } = req.body;
     if (name !== undefined) {
       if (!name.trim()) return res.status(400).json({ error: 'Company name is required.' });
+      if (companies.some(c => c.id !== company.id && c.name.toLowerCase() === name.trim().toLowerCase())) {
+        return res.status(400).json({ error: 'A company with this name already exists.' });
+      }
       company.name = name.trim();
     }
     if (industry !== undefined) company.industry = industry;
     if (notes !== undefined) company.notes = notes;
+
+    (['address', 'business_unit_id', 'cost_center_id', 'default_department_id', 'currency', 'tax_id', 'default_approver_id'] as const)
+      .forEach(field => {
+        const value = req.body[field];
+        if (value !== undefined && company[field] !== value) {
+          addMasterDataHistory('companies', company.id, field, String(company[field] ?? '(none)'), String(value || '(none)'), user.id);
+          company[field] = value;
+        }
+      });
 
     res.json(company);
   });
@@ -840,6 +1205,10 @@ If no action is taken within ${STALE_APPROVER_FALLBACK_DAYS} days, this will be 
       agreements: req.body.agreements || '',
       action_items: req.body.action_items || '',
       prepared_by: user.name,
+      // Smart defaults (Phase 3 MDM) — the logged-in user's department/job
+      // title are already known, so there's no reason to ask them again.
+      prepared_by_department: user.department,
+      prepared_by_job_title: user.job_title,
       file_url: req.body.file_url,
       file_name: req.body.file_name,
       status: req.body.status || MomStatus.DRAFT,
@@ -847,7 +1216,8 @@ If no action is taken within ${STALE_APPROVER_FALLBACK_DAYS} days, this will be 
       minutes_source: req.body.minutes_source || MinutesSource.TEMPLATE,
       meeting_type: req.body.meeting_type || '',
       participants_internal: req.body.participants_internal || '',
-      participants_external: req.body.participants_external || ''
+      participants_external: req.body.participants_external || '',
+      custom_fields: req.body.custom_fields || undefined
     };
 
     getOrCreateCompany(mom.client);
@@ -895,6 +1265,7 @@ If no action is taken within ${STALE_APPROVER_FALLBACK_DAYS} days, this will be 
     mom.meeting_type = req.body.meeting_type ?? mom.meeting_type;
     mom.participants_internal = req.body.participants_internal ?? mom.participants_internal;
     mom.participants_external = req.body.participants_external ?? mom.participants_external;
+    mom.custom_fields = req.body.custom_fields ?? mom.custom_fields;
 
     res.json(mom);
   });
@@ -905,6 +1276,13 @@ If no action is taken within ${STALE_APPROVER_FALLBACK_DAYS} days, this will be 
 
     const mom = moms.find(m => m.id === req.params.id && m.requestor_id === user.id);
     if (!mom) return res.status(404).json({ error: 'MOM not found' });
+
+    // Finalizing (Draft -> Completed) is the actual "submit" moment for a MOM
+    // in every current flow (both MomQuickCreateModal and Moms.tsx always
+    // POST as Draft first, then call this route) — so required dynamic
+    // fields are enforced here, not on the earlier POST/PUT.
+    const customFieldError = validateRequiredCustomFields('mom', mom.custom_fields);
+    if (customFieldError) return res.status(400).json({ error: customFieldError });
 
     mom.status = MomStatus.COMPLETED;
 
@@ -2868,6 +3246,13 @@ You'll receive another email as soon as a decision is made.`
     supportRequests = [];
     supportMessages = [];
     companies = buildInitialCompanies();
+    departments = buildInitialDepartments();
+    costCenters = buildInitialCostCenters();
+    businessUnits = buildInitialBusinessUnits();
+    branches = buildInitialBranches();
+    projectCodes = buildInitialProjectCodes();
+    vendors = buildInitialVendors();
+    fieldDefinitions = buildInitialFieldDefinitions();
 
     users.length = 0;
     users.push(...buildDefaultUsers());
@@ -4207,6 +4592,16 @@ You'll receive another email as soon as a decision is made.`
     supportRequests = [];
     supportMessages = [];
     companies = buildInitialCompanies();
+    // Master data (Phase 1 MDM) is catalog-style reference data, same as
+    // companies — reset to its seed set for demo consistency rather than
+    // persisted like systemSettings.
+    departments = buildInitialDepartments();
+    costCenters = buildInitialCostCenters();
+    businessUnits = buildInitialBusinessUnits();
+    branches = buildInitialBranches();
+    projectCodes = buildInitialProjectCodes();
+    vendors = buildInitialVendors();
+    fieldDefinitions = buildInitialFieldDefinitions();
 
     users.length = 0;
     users.push(...buildDefaultUsers());

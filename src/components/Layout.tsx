@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { UserRole, Email } from '../types';
 import { apiFetch } from '../lib/api';
-import { Bell, SignOut, CaretRight, MagnifyingGlass, SquaresFour, List, PlusCircle, ListChecks, ClipboardText, CalendarBlank, EnvelopeSimple, ShieldCheck, Gear, BookOpen, UserSwitch, Database, Wallet, ClockCounterClockwise, Archive, UsersThree, Buildings, Lifebuoy, ChartBar, UserCircle } from '@phosphor-icons/react';
+import { Bell, SignOut, CaretRight, MagnifyingGlass, SquaresFour, List, PlusCircle, ListChecks, ClipboardText, CalendarBlank, EnvelopeSimple, ShieldCheck, Gear, BookOpen, UserSwitch, Database, Wallet, ClockCounterClockwise, Archive, UsersThree, Buildings, Lifebuoy, ChartBar, UserCircle, Stack, TextAa } from '@phosphor-icons/react';
 import { formatPHP, IS_DEMO_MODE } from '../utils';
 import { formatDistanceToNowStrict } from 'date-fns';
 
@@ -33,6 +33,8 @@ export const navItems = [
   { label: 'Receipt Archive', path: '/receipts', icon: Archive, group: 'SYSTEM', roles: [UserRole.ADMIN] },
   { label: 'User Accounts', path: '/users', icon: UsersThree, group: 'SYSTEM', roles: [UserRole.ADMIN] },
   { label: 'Company Directory', path: '/companies', icon: Buildings, group: 'SYSTEM', roles: [UserRole.ADMIN] },
+  { label: 'Master Data', path: '/master-data', icon: Stack, group: 'SYSTEM', roles: [UserRole.ADMIN] },
+  { label: 'Dynamic Form Fields', path: '/form-fields', icon: TextAa, group: 'SYSTEM', roles: [UserRole.ADMIN] },
   { label: 'Audit Log', path: '/audit', icon: ShieldCheck, group: 'SYSTEM', roles: [UserRole.ADMIN] },
   { label: 'System Reporting', path: '/reporting', icon: ChartBar, group: 'SYSTEM', roles: [UserRole.ADMIN] },
   { label: 'Settings', path: '/settings', icon: Gear, group: 'SYSTEM', roles: [UserRole.APPROVER, UserRole.ADMIN] },
