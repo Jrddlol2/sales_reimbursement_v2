@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { User, Claim, CashAdvance, Liquidation, ClaimStatus, CashAdvanceStatus, LiquidationStatus, LiquidationVarianceType } from '../../types';
 import { apiFetch } from '../../lib/api';
-import { MetricCard } from './MetricCard';
+import { MetricRow } from './MetricRow';
 import { DashboardPeriodFilter } from './DashboardPeriodFilter';
 import { DashboardHeader } from './DashboardHeader';
 import { QuickActionsCard } from './QuickActionsCard';
@@ -12,7 +12,6 @@ import { SimpleLineChart, DonutChart } from './AnalyticsCharts';
 import { FileText, Bank, CalendarPlus, Receipt, ReceiptX, Money } from '@phosphor-icons/react';
 import { formatPHP } from '../../utils';
 import { metricsForRole, MetricContext } from '../../metrics/registry';
-import { useDashboardPeriod } from '../../contexts/DashboardPeriodContext';
 import { UserRole } from '../../types';
 
 export const RequestorDashboard: React.FC<{ user: User }> = ({ user }) => {
@@ -20,7 +19,6 @@ export const RequestorDashboard: React.FC<{ user: User }> = ({ user }) => {
   const [cadvs, setCadvs] = useState<CashAdvance[]>([]);
   const [liqs, setLiqs] = useState<Liquidation[]>([]);
   const [loading, setLoading] = useState(true);
-  const { resolveMetricRange, effectiveScope } = useDashboardPeriod();
 
   useEffect(() => {
     Promise.all([
@@ -163,27 +161,13 @@ export const RequestorDashboard: React.FC<{ user: User }> = ({ user }) => {
         <CashAdvanceLiquidationSection
           afterActionPanel={
             <div className="mb-2">
-              <h2 className="text-lg font-bold text-slate-800 mb-1">My Requests</h2>
-              <p className="text-sm text-slate-500 mb-4">Track the status of your submitted requests, each scoped to its own relevant period</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                {requestorMetricDefs.map(metric => {
-                  const scope = effectiveScope(metric);
-                  const range = resolveMetricRange(metric);
-                  const value = metric.compute(ctx, range);
-                  const action = metricActionMap[metric.id];
-                  return (
-                    <MetricCard
-                      key={metric.id}
-                      metric={metric}
-                      ctx={ctx}
-                      scope={scope}
-                      value={value}
-                      actionLabel={action?.actionLabel}
-                      actionPath={action?.actionPath}
-                    />
-                  );
-                })}
-              </div>
+              <MetricRow
+                metrics={requestorMetricDefs}
+                ctx={ctx}
+                actionMap={metricActionMap}
+                heading="My Requests"
+                subheading="Track the status of your submitted requests, each scoped to its own relevant period"
+              />
             </div>
           }
         />

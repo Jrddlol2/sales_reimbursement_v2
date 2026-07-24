@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { UserRole, Email } from '../types';
 import { apiFetch } from '../lib/api';
-import { Bell, SignOut, CaretRight, MagnifyingGlass, SquaresFour, List, PlusCircle, ListChecks, ClipboardText, CalendarBlank, EnvelopeSimple, ShieldCheck, Gear, BookOpen, UserSwitch, Database, Wallet, ClockCounterClockwise, Archive, UsersThree, Buildings, Lifebuoy, ChartBar, UserCircle, Stack, TextAa } from '@phosphor-icons/react';
+import { Bell, SignOut, CaretRight, MagnifyingGlass, SquaresFour, List, PlusCircle, ListChecks, ClipboardText, CalendarBlank, EnvelopeSimple, ShieldCheck, BookOpen, UserSwitch, Database, Wallet, ClockCounterClockwise, Archive, UsersThree, Buildings, Lifebuoy, ChartBar, UserCircle, Stack, TextAa } from '@phosphor-icons/react';
 import { formatPHP, IS_DEMO_MODE } from '../utils';
 import { formatDistanceToNowStrict } from 'date-fns';
 
@@ -37,7 +37,9 @@ export const navItems = [
   { label: 'Dynamic Form Fields', path: '/form-fields', icon: TextAa, group: 'SYSTEM', roles: [UserRole.ADMIN] },
   { label: 'Audit Log', path: '/audit', icon: ShieldCheck, group: 'SYSTEM', roles: [UserRole.ADMIN] },
   { label: 'System Reporting', path: '/reporting', icon: ChartBar, group: 'SYSTEM', roles: [UserRole.ADMIN] },
-  { label: 'Settings', path: '/settings', icon: Gear, group: 'SYSTEM', roles: [UserRole.APPROVER, UserRole.ADMIN] },
+  // Settings used to be one entry relabeled per role; now two real destinations.
+  { label: 'Approval Delegation', path: '/settings/delegation', icon: UserSwitch, group: 'SYSTEM', roles: [UserRole.APPROVER] },
+  { label: 'Data Management', path: '/settings/data', icon: Database, group: 'SYSTEM', roles: [UserRole.ADMIN] },
   IS_DEMO_MODE ? { label: 'Scenario Guide', path: '/scenarios', icon: BookOpen, group: 'RESOURCES', roles: [UserRole.REQUESTOR, UserRole.APPROVER, UserRole.CUSTODIAN, UserRole.ADMIN] } : null,
   ].filter(Boolean) as any[];
 
@@ -240,19 +242,7 @@ export const Layout: React.FC = () => {
     };
   }, [user]);
 
-  const visibleNavItems = navItems
-    .filter(item => user && item.roles.includes(user.role))
-    .map(item => {
-      if (item.path === '/settings' && user) {
-        if (user.role === UserRole.APPROVER) {
-          return { ...item, label: 'Approval Delegation', icon: UserSwitch };
-        }
-        if (user.role === UserRole.ADMIN) {
-          return { ...item, label: 'Data Management', icon: Database };
-        }
-      }
-      return item;
-    });
+  const visibleNavItems = navItems.filter(item => user && item.roles.includes(user.role));
 
   const handleLogout = () => {
     logout();
@@ -272,11 +262,9 @@ export const Layout: React.FC = () => {
     if (path.startsWith('/moms')) return 'Meeting Minutes';
     if (path.startsWith('/claims/new')) return 'New Reimbursement';
     if (path.startsWith('/scenarios')) return 'Scenario Guide';
-    if (path.startsWith('/settings')) {
-      if (user?.role === UserRole.APPROVER) return 'Approval Delegation';
-      if (user?.role === UserRole.ADMIN) return 'Data Management';
-      return 'Settings';
-    }
+    if (path.startsWith('/settings/delegation')) return 'Approval Delegation';
+    if (path.startsWith('/settings/data')) return 'Data Management';
+    if (path.startsWith('/settings')) return 'Settings';
     return 'Home';
   }
 

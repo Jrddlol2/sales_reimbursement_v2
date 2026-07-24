@@ -47,12 +47,24 @@ const roleHomePages: Record<UserRole, string> = {
   [UserRole.ADMIN]: '/audit',
 };
 
-// The standalone Approver Inbox page was merged into the Dashboard — this
-// keeps any old /approvals?tab=X link (bookmarks, notification click-throughs)
-// working by forwarding to the same tab on the Dashboard instead of 404ing.
+// Compatibility shim, not a live route. The standalone Approver Inbox page was
+// merged into the Dashboard — this keeps any old /approvals?tab=X link
+// (bookmarks, notification click-throughs) working by forwarding to the same
+// tab on the Dashboard instead of 404ing.
 const ApprovalsRedirect = () => {
   const location = useLocation();
   return <Navigate to={`/${location.search}`} replace />;
+};
+
+// /settings used to be one page relabeled per role. It's now two real routes
+// (/settings/delegation for Approvers, /settings/data for Admins); this keeps
+// the bare /settings path (and the dashboard quick-actions still pointing at
+// it) working by resolving to the right one by role.
+const SettingsRedirect = () => {
+  const { user } = useAuth();
+  if (user?.role === UserRole.APPROVER) return <Navigate to="/settings/delegation" replace />;
+  if (user?.role === UserRole.ADMIN) return <Navigate to="/settings/data" replace />;
+  return <Navigate to={(user && roleHomePages[user.role]) || '/'} replace />;
 };
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -67,18 +79,16 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   let allowed = true;
 
-  // 1. Check for notifications - allowed for all roles to view their email inbox/system emails
-  if (path === '/notifications') {
-    allowed = true;
-  }
-  // 2. "/claims/new" itself isn't a sidebar item for every role that can
-  // reach it — Approvers get there via the "My Requests" page's button
-  // rather than a dedicated sidebar link — so it's checked explicitly
-  // instead of falling through to the navItems lookup below.
-  else if (path === '/claims/new') {
+  // "/claims/new" isn't a sidebar item for every role that can reach it —
+  // Approvers get there via the "My Requests" page's button rather than a
+  // dedicated sidebar link — so it's checked explicitly instead of falling
+  // through to the navItems lookup below. ("/notifications" needs no special
+  // case: it redirects to /emails at the route level, and an unmatched path
+  // already defaults to allowed.)
+  if (path === '/claims/new') {
     allowed = [UserRole.REQUESTOR, UserRole.APPROVER].includes(user.role);
   }
-  // 3. Check for claim details: "/claims/:id", "/cash-advances/:id", "/liquidations/:id"
+  // Check for claim details: "/claims/:id", "/cash-advances/:id", "/liquidations/:id"
   else if (
     path.startsWith('/claims/') ||
     path.startsWith('/cash-advances/') ||
@@ -90,7 +100,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
       allowed = [UserRole.REQUESTOR, UserRole.APPROVER, UserRole.CUSTODIAN, UserRole.ADMIN].includes(user.role);
     }
   }
-  // 4. Match against exported navItems from Layout.tsx — a path can appear
+  // Match against exported navItems from Layout.tsx — a path can appear
   // as more than one entry (different roles reach it via different sidebar
   // groups, e.g. "Ready to Claim" for Requestor vs. Approver), so check
   // every matching entry rather than stopping at the first one.
@@ -151,7 +161,9 @@ export default function App() {
                   <Route path="moms/:id" element={<MomDetail />} />
                   <Route path="support" element={<Support />} />
                   <Route path="support/:id" element={<SupportDetail />} />
-                  <Route path="settings" element={<Settings />} />
+                  <Route path="settings" element={<SettingsRedirect />} />
+                  <Route path="settings/delegation" element={<Settings />} />
+                  <Route path="settings/data" element={<Settings />} />
                   <Route path="settings/import" element={<HistoricalImport />} />
                   <Route path="scenarios" element={<ScenarioGuide />} />
                   <Route path="*" element={
