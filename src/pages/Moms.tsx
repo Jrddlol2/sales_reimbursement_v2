@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { Mom, MomStatus, MinutesSource, UserRole, Company } from '../types';
 import { useAuth } from '../components/AuthContext';
-import { uploadFile, getUploadUrl } from '../utils';
+import { uploadFile, getUploadUrl, formatDate } from '../utils';
 import { StatusBadge } from '../components/StatusBadge';
 import { 
   FileText, Plus, PaperPlaneRight, CheckCircle, Calendar, Clock, MapPin, 
@@ -495,7 +495,7 @@ export const Moms: React.FC = () => {
     if (monthString === 'Unknown Month') return monthString;
     const date = new Date(monthString + '-01');
     if (isNaN(date.getTime())) return monthString;
-    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    return formatDate(date, { month: 'long', year: 'numeric' });
   };
 
   const renderMomCard = (mom: Mom) => (
@@ -566,7 +566,7 @@ export const Moms: React.FC = () => {
             onClick={() => handleSendAndComplete(mom.id)}
             className="corp-btn-primary text-xs font-semibold px-3 py-1.5 rounded flex items-center gap-1 shadow-sm"
           >
-            <PaperPlaneRight className="w-3 h-3" /> Send MOM
+            <PaperPlaneRight className="w-3 h-3" /> Finalize & Send
           </button>
         )}
       </div>
@@ -1106,7 +1106,7 @@ export const Moms: React.FC = () => {
                   </div>
                   <div>
                     <span className="font-bold uppercase tracking-wider block text-[10px] text-gray-400">Date of Meeting</span>
-                    <span className="font-semibold text-gray-900 text-sm">{meetingDate ? new Date(meetingDate).toLocaleDateString() : '(Select Date)'}</span>
+                    <span className="font-semibold text-gray-900 text-sm">{meetingDate ? formatDate(meetingDate) : '(Select Date)'}</span>
                   </div>
                   <div className="mt-2">
                     <span className="font-bold uppercase tracking-wider block text-[10px] text-gray-400">Representative</span>

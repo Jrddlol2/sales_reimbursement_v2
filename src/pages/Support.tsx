@@ -77,14 +77,14 @@ export const Support: React.FC = () => {
         </div>
         {!showNew && user?.role !== UserRole.ADMIN && (
           <button onClick={() => setShowNew(true)} className="corp-btn-primary whitespace-nowrap">
-            <Plus className="w-4 h-4" /> New Request
+            <Plus className="w-4 h-4" /> New Support Ticket
           </button>
         )}
       </div>
 
       {showNew && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-bold mb-4 font-display uppercase tracking-wider">Submit New Request</h2>
+          <h2 className="text-lg font-bold mb-4 font-display uppercase tracking-wider">Submit New Support Ticket</h2>
           <form onSubmit={handleCreate} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Subject</label>

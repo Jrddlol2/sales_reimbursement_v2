@@ -12,6 +12,7 @@ import { formatPHP, uploadFile } from '../utils';
 import { useToast } from '../components/Toast';
 import { ExpenseLineItemEditor } from '../components/ExpenseLineItemEditor';
 import { Input, Textarea, Select, labelClass, fieldBaseClass, fieldStateClass, RequiredMark } from '../components/ui/Input';
+import { MomQuickCreateModal } from '../components/MomQuickCreateModal';
 
 interface LineItem {
   id: string;
@@ -83,6 +84,10 @@ export const SubmitClaim: React.FC = () => {
 
   // Form State
   const [selectedMomId, setSelectedMomId] = useState('');
+  // Lets a Requestor create+finalize a MOM without navigating away from a
+  // half-filled claim (which used to mean losing their place mid-form,
+  // relying on the autosave draft to get back to where they were).
+  const [showMomQuickCreate, setShowMomQuickCreate] = useState(false);
   const [remarks, setRemarks] = useState('');
   const [supportingDocs, setSupportingDocs] = useState('');
   const [meetingDate, setMeetingDate] = useState('');
@@ -354,6 +359,14 @@ export const SubmitClaim: React.FC = () => {
     ]);
   };
 
+  // MomQuickCreateModal already toasts its own success message on finalize —
+  // this just wires the result back into the claim form's own state.
+  const handleMomCreated = (mom: Mom) => {
+    setMoms(prev => [mom, ...prev]);
+    setSelectedMomId(mom.id);
+    setShowMomQuickCreate(false);
+  };
+
   const handleQuickFill = () => {
     if (moms.length === 0) {
       toast.error('You must have at least one Completed MOM to use Quick-Fill. Go to the MOM Manager to complete a meeting document first!');
@@ -491,7 +504,7 @@ export const SubmitClaim: React.FC = () => {
             <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
           </Link>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 font-display">
-            {isResubmit ? 'Revise & Resubmit Claim' : requestType === 'cash_advance' ? 'Request Cash Advance' : 'Submit Reimbursement Claim'}
+            {isResubmit ? 'Revise & Resubmit Claim' : requestType === 'cash_advance' ? 'Request Cash Advance' : 'New Reimbursement'}
           </h1>
           <p className="text-xs text-slate-500">
             {isResubmit
@@ -732,12 +745,13 @@ export const SubmitClaim: React.FC = () => {
                 </p>
               </div>
               <div className="pt-2 flex items-center justify-center gap-3 flex-wrap">
-                <Link
-                  to="/moms?create=true"
+                <button
+                  type="button"
+                  onClick={() => setShowMomQuickCreate(true)}
                   className="corp-btn-primary"
                 >
                   <Plus className="w-4 h-4" /> Create New MOM
-                </Link>
+                </button>
                 <Link
                   to="/moms"
                   className="inline-flex items-center justify-center text-xs font-bold text-slate-600 hover:text-slate-800 border border-slate-300 hover:bg-slate-50 px-4 py-2 rounded uppercase tracking-wider font-display"
@@ -772,12 +786,13 @@ export const SubmitClaim: React.FC = () => {
                           </option>
                         ))}
                       </select>
-                      <Link
-                        to="/moms?create=true"
+                      <button
+                        type="button"
+                        onClick={() => setShowMomQuickCreate(true)}
                         className="inline-flex items-center justify-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 hover:bg-slate-200 px-3 py-2 rounded whitespace-nowrap shrink-0"
                       >
                         <Plus className="w-4 h-4" /> Create New MOM
-                      </Link>
+                      </button>
                     </div>
                     {formErrors.mom ? (
                       <p className="text-[11px] text-red-600 font-semibold mt-1 flex items-center gap-1">
@@ -931,13 +946,20 @@ export const SubmitClaim: React.FC = () => {
                     disabled={loading || !user?.reports_to || (!isResubmit && hasMeetingConflict)}
                     className="corp-btn-primary"
                   >
-                    <PaperPlaneRight className="w-4 h-4" /> {loading ? 'Submitting...' : (isResubmit ? 'Resubmit Claim' : 'Submit Claim')}
+                    <PaperPlaneRight className="w-4 h-4" /> {loading ? 'Submitting...' : (isResubmit ? 'Resubmit Claim' : 'Submit Reimbursement')}
                   </button>
                 </div>
               </div>
             </form>
           )}
         </>
+      )}
+
+      {showMomQuickCreate && (
+        <MomQuickCreateModal
+          onClose={() => setShowMomQuickCreate(false)}
+          onCreated={handleMomCreated}
+        />
       )}
     </div>
   );

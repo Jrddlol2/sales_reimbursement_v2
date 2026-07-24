@@ -68,6 +68,7 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ embedded = false }
   // inline for its decision instead of navigating away, since those don't
   // have a full-page detail view the way claims do.
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [queueViewFilter, setQueueViewFilter] = useState<'all' | 'to_review' | 'my_returned'>('all');
 
   // Bulk actions
   const [selectedForBulk, setSelectedForBulk] = useState<string[]>([]);
@@ -240,6 +241,16 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ embedded = false }
     ...pendingAdvances.map(ca => ({ kind: 'cadv' as const, id: ca.id, date: ca.createdAt, ca })),
     ...pendingLiqs.map(liq => ({ kind: 'liq' as const, id: liq.id, date: liq.createdAt, liq })),
   ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // "Approve someone else's claim" and "fix my own returned claim" are
+  // different tasks sharing one list — this filter chip lets an approver
+  // separate them without splitting the queue into separate tabs/lists.
+  const isMyReturnedItem = (item: typeof unifiedPendingItems[number]) =>
+    item.kind === 'claim' && item.claim.status === ClaimStatus.RETURNED;
+  const displayedPendingItems = unifiedPendingItems.filter(item => {
+    if (queueViewFilter === 'all') return true;
+    return queueViewFilter === 'my_returned' ? isMyReturnedItem(item) : !isMyReturnedItem(item);
+  });
 
   const toggleBulkSelection = (id: string) => {
     setSelectedForBulk(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -557,6 +568,29 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ embedded = false }
           <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider font-display flex items-center gap-2"><div className="w-1 h-3 bg-brand rounded-full"></div>Action Items</h3>
         </div>
         <div>
+          {/* Filter chip — "judge someone else's claim" and "fix my own
+              returned claim" are different tasks sharing one list; this lets
+              an approver view them separately without a second tab. Only
+              shown when there's actually a mix to separate. */}
+          {returnedClaims.length > 0 && unifiedPendingItems.length > returnedClaims.length && (
+            <div className="px-4 pt-3 flex flex-wrap gap-1.5">
+              {([
+                { key: 'all' as const, label: `All (${unifiedPendingItems.length})` },
+                { key: 'to_review' as const, label: `To Review (${unifiedPendingItems.length - returnedClaims.length})` },
+                { key: 'my_returned' as const, label: `My Returned Claims (${returnedClaims.length})` },
+              ]).map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setQueueViewFilter(f.key)}
+                  className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-colors ${
+                    queueViewFilter === f.key ? 'bg-brand text-white border-brand' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
           {/* Card list — replaces the old table, which kept overflowing the
               viewport no matter how the columns were trimmed. Cards reflow
               (1 column narrow, 2 columns wide) instead of forcing a fixed
@@ -580,7 +614,11 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ embedded = false }
               <div className="lg:col-span-2">
                 <EmptyState icon={Tray} title="Inbox Zero!" description="You have no pending approvals or returned claims." />
               </div>
-            ) : unifiedPendingItems.map(item => {
+            ) : displayedPendingItems.length === 0 ? (
+              <div className="lg:col-span-2">
+                <EmptyState icon={Tray} title="Nothing in this view" description="No items match the selected filter." />
+              </div>
+            ) : displayedPendingItems.map(item => {
               // The queue is sorted oldest-first and "Oldest Pending" is a
               // headline KPI, but until now nothing on the card itself showed
               // which one that was — the approver had to infer age from list
@@ -805,10 +843,10 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({ embedded = false }
           </div>
         </div>
 
-        {unifiedPendingItems.length > 0 && (
+        {displayedPendingItems.length > 0 && (
           <div className="bg-white px-4 py-2 border-t border-gray-200 sm:px-6">
             <p className="text-[10px] text-gray-500">
-              Showing all <span className="font-medium text-gray-900">{unifiedPendingItems.length}</span> result{unifiedPendingItems.length === 1 ? '' : 's'}
+              Showing <span className="font-medium text-gray-900">{displayedPendingItems.length}</span> of {unifiedPendingItems.length} result{unifiedPendingItems.length === 1 ? '' : 's'}
             </p>
           </div>
         )}

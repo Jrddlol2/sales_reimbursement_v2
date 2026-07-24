@@ -1,3 +1,4 @@
+import Papa from 'papaparse';
 import { Claim, Approval, User } from './types';
 import { getStatusBadgeClass, getStatusConfig } from './statusConfig';
 
@@ -18,6 +19,21 @@ export const formatPHP = (amount: number) => {
     currency: 'PHP',
     minimumFractionDigits: 2
   }).format(amount);
+};
+
+// Single source of truth for date display — call sites otherwise reach for
+// whichever toLocaleDateString/toLocaleString options are at hand, producing
+// "7/24/2026" in one table and "July 24, 2026" in the next for the same kind
+// of value. Defaults to a compact "Jul 24, 2026" form; pass `options` to
+// override for a specific need (e.g. a "Month Year" grouping label).
+export const formatDate = (date: string | Date, options?: Intl.DateTimeFormatOptions): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString('en-US', options ?? { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+export const formatDateTime = (date: string | Date): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
 
 // Every claim gets a real claim_number once /api/claims persists it; this
@@ -83,3 +99,25 @@ export const getUploadUrl = (url?: string | null): string => {
 };
 
 export const IS_DEMO_MODE = (import.meta as any).env?.VITE_IS_DEMO_MODE !== 'false';
+
+// Shared by TransactionHistory and MyRequests — both export the same shape
+// of unified request row, so the CSV-building logic lives in one place
+// instead of two copies that could format columns differently over time.
+export const exportRequestsToCSV = (
+  items: { reference: string; type: string; status: string; amount: number; date: string }[],
+  filename: string
+) => {
+  if (items.length === 0) return;
+  const csv = Papa.unparse(items.map(item => ({
+    Reference: item.reference,
+    Type: item.type,
+    Status: item.status,
+    Amount: item.amount,
+    Date: item.date ? item.date.substring(0, 10) : ''
+  })));
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+};

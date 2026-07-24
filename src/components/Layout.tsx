@@ -9,7 +9,7 @@ import { formatDistanceToNowStrict } from 'date-fns';
 
 export const navItems = [
     { label: 'Dashboard', path: '/', icon: SquaresFour, group: 'PRIMARY', roles: [UserRole.REQUESTOR, UserRole.APPROVER, UserRole.CUSTODIAN, UserRole.ADMIN] },
-  { label: 'New Request', path: '/claims/new', icon: PlusCircle, group: 'PRIMARY', roles: [UserRole.REQUESTOR] },
+  { label: 'New Reimbursement', path: '/claims/new', icon: PlusCircle, group: 'PRIMARY', roles: [UserRole.REQUESTOR] },
   { label: 'Processing Queue', path: '/processing', icon: ListChecks, group: 'PRIMARY', roles: [UserRole.CUSTODIAN] },
   { label: 'Ready to Claim', path: '/ready-to-claim', icon: Wallet, group: 'PRIMARY', roles: [UserRole.REQUESTOR] },
   { label: 'Transaction History', path: '/history', icon: ClockCounterClockwise, group: 'PRIMARY', roles: [UserRole.REQUESTOR, UserRole.CUSTODIAN] },
@@ -268,7 +268,7 @@ export const Layout: React.FC = () => {
     if (path.startsWith('/reporting')) return 'System Reporting';
     if (path.startsWith('/receipts')) return 'Receipt Archive';
     if (path.startsWith('/moms')) return 'Meeting Minutes';
-    if (path.startsWith('/claims/new')) return 'New Request';
+    if (path.startsWith('/claims/new')) return 'New Reimbursement';
     if (path.startsWith('/scenarios')) return 'Scenario Guide';
     if (path.startsWith('/settings')) {
       if (user?.role === UserRole.APPROVER) return 'Approval Delegation';

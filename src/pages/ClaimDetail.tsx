@@ -9,7 +9,7 @@ import {
   MapPin, Calendar, Clock, CurrencyDollar, Shield, Check, Info, ArrowRight,
   PencilSimple, Download, ArrowCounterClockwise, Lifebuoy, Printer
 } from '@phosphor-icons/react';
-import { formatPHP, getClaimNumber, getUploadUrl } from '../utils';
+import { formatPHP, formatDate, getClaimNumber, getUploadUrl } from '../utils';
 import { CLAIM_WORKFLOW_STAGES, getWorkflowStageIndex, getStatusConfig } from '../statusConfig';
 import { MomEditForm } from '../components/MomEditForm';
 import { ClaimMomSummary } from '../components/ClaimMomSummary';
@@ -434,7 +434,7 @@ export const ClaimDetail: React.FC<ClaimDetailProps> = ({ claimId: propClaimId, 
                       <Calendar className="w-5 h-5 text-slate-400" />
                       <div>
                         <div className="text-sm font-bold text-slate-900">
-                          {new Date(claim.reviewMeeting.meeting_date).toLocaleDateString()} at {claim.reviewMeeting.meeting_time}
+                          {formatDate(claim.reviewMeeting.meeting_date)} at {claim.reviewMeeting.meeting_time}
                         </div>
                         <div className="text-xs text-slate-500 mt-0.5">Internal review call with your Approver — separate from the client meeting.</div>
                       </div>

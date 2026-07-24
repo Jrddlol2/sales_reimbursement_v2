@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { apiFetch } from '../lib/api';
-import { Claim, CashAdvance, Liquidation, User, UserRole } from '../types';
-import { formatPHP } from '../utils';
+import React, { useState } from 'react';
+import { UserRole } from '../types';
+import { formatPHP, exportRequestsToCSV } from '../utils';
 import { useAuth } from '../components/AuthContext';
 import { StatusBadge } from '../components/StatusBadge';
 import { WorkflowOwnerTag } from '../components/WorkflowOwnerTag';
@@ -9,27 +8,22 @@ import { ClockCounterClockwise, CaretRight, Funnel } from '@phosphor-icons/react
 import { EmptyState } from '../components/EmptyState';
 import { Pagination, usePagination } from '../components/Pagination';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import Papa from 'papaparse';
 import { DownloadSimple } from '@phosphor-icons/react';
-
-interface UnifiedActivityItem {
-  id: string;
-  reference: string;
-  type: 'Reimbursement' | 'Cash Advance' | 'Liquidation';
-  status: string;
-  amount: number;
-  date: string;
-  path: string;
-  requestorName?: string;
-  approverName?: string;
-}
+import { useUnifiedRequestList } from '../hooks/useUnifiedRequestList';
 
 export const TransactionHistory: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [items, setItems] = useState<UnifiedActivityItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  // /api/claims etc. return everything the caller's role can see — for an
+  // Approver that includes their direct reports' claims too (needed for the
+  // approval queue), not just their own submissions. This page is
+  // specifically the Approver's own history, so scope it down the same way
+  // MyRequests.tsx does. Requestor/Custodian keep their existing
+  // (already-correct) unfiltered behavior — for Custodian in particular this
+  // is a system-wide transaction log, not a personal one.
+  const isOwn = user?.role === UserRole.APPROVER;
+  const { items, loading } = useUnifiedRequestList(isOwn ? user!.id : undefined);
 
   // Filters state
   const [searchParams, setSearchParams] = useSearchParams();
@@ -39,78 +33,6 @@ export const TransactionHistory: React.FC = () => {
   const [endDate, setEndDate] = useState('');
 
   const ITEMS_PER_PAGE = 10;
-
-  useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      apiFetch('/api/claims'),
-      apiFetch('/api/cash-advances'),
-      apiFetch('/api/liquidations'),
-      apiFetch('/api/users')
-    ])
-      .then(([claimsData, cadvsData, liqsData, usersData]: [Claim[], CashAdvance[], Liquidation[], User[]]) => {
-        // /api/claims etc. return everything the caller's role can see —
-        // for an Approver that includes their direct reports' claims too
-        // (needed for the approval queue), not just their own submissions.
-        // This page is specifically the Approver's own history, so scope it
-        // down the same way MyRequests.tsx does. Requestor/Custodian keep
-        // their existing (already-correct) unfiltered behavior.
-        const isOwn = user?.role === UserRole.APPROVER;
-        const ownClaims = isOwn ? claimsData.filter(c => c.requestor_id === user!.id) : claimsData;
-        const ownCadvs = isOwn ? cadvsData.filter((c: any) => c.requestorId === user!.id) : cadvsData;
-        const ownLiqs = isOwn ? liqsData.filter((l: any) => l.requestorId === user!.id) : liqsData;
-
-        // The "waiting on whom" tag needs a person's name, not just the raw
-        // *_id the list endpoints return — resolve both ends (requestor and
-        // current approver) through one lookup map built from /api/users.
-        const usersById = new Map(usersData.map(u => [u.id, u]));
-
-        const unified: UnifiedActivityItem[] = [
-          ...ownClaims.map(c => ({
-            id: c.id,
-            reference: c.claim_number || `REIM-${c.id.substring(0, 6)}`,
-            type: 'Reimbursement' as const,
-            status: c.status,
-            amount: c.total_amount,
-            date: c.created_at,
-            path: `/claims/${c.id}`,
-            requestorName: usersById.get(c.requestor_id)?.name,
-            approverName: usersById.get(c.current_approver_id)?.name,
-          })),
-          ...ownCadvs.map((c: any) => ({
-            id: c.id,
-            reference: `CADV-${c.id.substring(0, 6)}`,
-            type: 'Cash Advance' as const,
-            status: c.status,
-            amount: c.amount || 0,
-            date: c.createdAt || c.releaseDate || '',
-            path: `/cash-advances/${c.id}`,
-            requestorName: usersById.get(c.requestorId)?.name,
-            approverName: usersById.get(c.approverId)?.name,
-          })),
-          ...ownLiqs.map((l: any) => ({
-            id: l.id,
-            reference: `LIQ-${l.id.substring(0, 6)}`,
-            type: 'Liquidation' as const,
-            status: l.status,
-            amount: l.totalExpenses ?? l.totalSpent ?? 0,
-            date: l.createdAt || '',
-            path: `/liquidations/${l.id}`,
-            requestorName: usersById.get(l.requestorId)?.name,
-            approverName: usersById.get(l.cashAdvance?.approverId)?.name,
-          }))
-        ];
-
-        // Sort reverse-chronological by date
-        unified.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setItems(unified);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Error fetching history:', err);
-        setLoading(false);
-      });
-  }, []);
 
   // Derived filters — computed unconditionally (before the loading return
   // below) so usePagination, itself a hook, is never called conditionally.
@@ -171,21 +93,7 @@ export const TransactionHistory: React.FC = () => {
     );
   }
 
-  const handleExport = () => {
-    if (filteredItems.length === 0) return;
-    const csv = Papa.unparse(filteredItems.map(item => ({
-      Reference: item.reference,
-      Type: item.type,
-      Status: item.status,
-      Amount: item.amount,
-      Date: item.date ? item.date.substring(0, 10) : ''
-    })));
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'transaction_history.csv';
-    link.click();
-  };
+  const handleExport = () => exportRequestsToCSV(filteredItems, 'transaction_history.csv');
 
   const types: Array<'All' | 'Reimbursement' | 'Cash Advance' | 'Liquidation'> = [
     'All',

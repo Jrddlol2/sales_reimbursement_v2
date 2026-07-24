@@ -162,41 +162,41 @@ export const CustodianDashboard: React.FC<{ user: User }> = ({ user }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard
             title="Pending Reimbursements"
-            value={formatPHP(pendingProcessingAmt)}
+            value={pendingProcessing.length}
             icon={Receipt}
             variant="warning"
             description="Approved claims to be processed"
-            additionalContext={`${pendingProcessing.length} claims ready for payment • Live`}
+            additionalContext={`${formatPHP(pendingProcessingAmt)} • Live`}
             actionLabel="Process Claims"
             actionPath="/processing"
           />
           <KPICard
             title="Approved Cash Advances"
-            value={formatPHP(pendingCadvReleasesAmt)}
+            value={pendingCadvReleases.length}
             icon={CurrencyDollar}
             variant={pendingCadvReleases.length > 0 ? "action" : "success"}
             description="Approved cash advances to release"
-            additionalContext={`${pendingCadvReleases.length} advances to release • Live`}
+            additionalContext={`${formatPHP(pendingCadvReleasesAmt)} • Live`}
             actionLabel="Release Advances"
             actionPath="/processing?tab=cadv"
           />
           <KPICard
             title="Pending Refunds"
-            value={formatPHP(pendingRefundsAmt)}
+            value={pendingRefunds.length}
             icon={ArrowDownLeft}
             variant={pendingRefunds.length > 0 ? "warning" : "success"}
             description="Refunds due from liquidations"
-            additionalContext={`${pendingRefunds.length} collections pending • Live`}
+            additionalContext={`${formatPHP(pendingRefundsAmt)} • Live`}
             actionLabel="Collect Refunds"
             actionPath="/processing?tab=cadv"
           />
           <KPICard
             title="Active Shortfalls"
-            value={formatPHP(pendingShortfallsAmt)}
+            value={pendingShortfalls.length}
             icon={WarningCircle}
             variant="danger"
             description="Shortfalls requiring claims"
-            additionalContext={`${pendingShortfalls.length} outstanding shortfalls • Live`}
+            additionalContext={`${formatPHP(pendingShortfallsAmt)} • Live`}
             actionLabel="View Details"
             actionPath="/processing"
           />

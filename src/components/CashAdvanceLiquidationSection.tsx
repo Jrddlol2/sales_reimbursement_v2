@@ -4,10 +4,10 @@ import { apiFetch } from '../lib/api';
 import { useAuth } from '../components/AuthContext';
 import { useToast } from '../components/Toast';
 import { useConfirm } from '../components/ConfirmModal';
-import { 
-  CashAdvance, CashAdvanceStatus, 
-  Liquidation, LiquidationStatus, LiquidationVarianceType, 
-  LiquidationLineItem, Mom, MomStatus, User, UserRole,
+import {
+  CashAdvance, CashAdvanceStatus,
+  Liquidation, LiquidationStatus, LiquidationVarianceType,
+  LiquidationLineItem, Mom, User,
   Claim, ClaimStatus
 } from '../types';
 import { ClaimLineItems } from './ClaimLineItems';
@@ -16,8 +16,8 @@ import { ClaimActivityTimeline } from './ClaimActivityTimeline';
 import { formatPHP, getClaimNumber } from '../utils';
 import { StatusBadge } from './StatusBadge';
 import { WorkflowOwnerTag } from './WorkflowOwnerTag';
-import { 
-  Plus, Trash, CloudArrowUp, X, WarningCircle, FileText, Check, ArrowLeft, PaperPlaneRight, Sparkle, MagnifyingGlass
+import {
+  Plus, Trash, CloudArrowUp, WarningCircle, FileText, Check, ArrowLeft, PaperPlaneRight, Sparkle, MagnifyingGlass
 } from '@phosphor-icons/react';
 
 interface LocalLineItem {
@@ -79,14 +79,6 @@ export const CashAdvanceLiquidationSection: React.FC<CashAdvanceLiquidationSecti
   const [activeClaimPrompt, setActiveClaimPrompt] = useState<string | null>(null);
   const [claimCodeInput, setClaimCodeInput] = useState("");
 
-  // Form states - Request Cash Advance
-  const [showRequestForm, setShowRequestForm] = useState(false);
-  const [advanceAmount, setAdvanceAmount] = useState('');
-  const [advancePurpose, setAdvancePurpose] = useState('');
-  const [advanceMomId, setAdvanceMomId] = useState('');
-  const [advanceApproverId, setAdvanceApproverId] = useState('');
-  const [submittingAdvance, setSubmittingAdvance] = useState(false);
-
   // Form states - Liquidation Report
   const [activeLiquidationCa, setActiveLiquidationCa] = useState<CashAdvance | null>(null);
   const [activeLiquidation, setActiveLiquidation] = useState<Liquidation | null>(null);
@@ -144,16 +136,6 @@ export const CashAdvanceLiquidationSection: React.FC<CashAdvanceLiquidationSecti
       setMoms(momData);
       setUsers(userData);
       setClaims(claimsData);
-
-      // Automatically set supervisor as default approver if user is Requestor
-      if (user?.reports_to) {
-        setAdvanceApproverId(user.reports_to);
-      } else {
-        const approvers = userData.filter((u: User) => u.role === UserRole.APPROVER);
-        if (approvers.length > 0) {
-          setAdvanceApproverId(approvers[0].id);
-        }
-      }
     } catch (err: any) {
       console.error(err);
       toast.error('Failed to load request records');
@@ -165,43 +147,6 @@ export const CashAdvanceLiquidationSection: React.FC<CashAdvanceLiquidationSecti
   useEffect(() => {
     fetchData();
   }, []);
-
-  const handleRequestAdvance = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const amountNum = parseFloat(advanceAmount);
-    if (isNaN(amountNum) || amountNum <= 0) {
-      return toast.error('Amount must be a valid number greater than zero.');
-    }
-    if (!advancePurpose.trim()) {
-      return toast.error('Purpose is required.');
-    }
-    if (!advanceApproverId) {
-      return toast.error('An approver must be selected.');
-    }
-
-    setSubmittingAdvance(true);
-    try {
-      await apiFetch('/api/cash-advances', {
-        method: 'POST',
-        body: JSON.stringify({
-          amount: amountNum,
-          purpose: advancePurpose,
-          momId: advanceMomId || undefined,
-          approverId: advanceApproverId
-        })
-      });
-      toast.success('Cash Advance requested successfully! Saved in Draft status.');
-      setShowRequestForm(false);
-      setAdvanceAmount('');
-      setAdvancePurpose('');
-      setAdvanceMomId('');
-      fetchData();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to submit Cash Advance request.');
-    } finally {
-      setSubmittingAdvance(false);
-    }
-  };
 
   const handleStartLiquidation = async (ca: CashAdvance) => {
     try {
@@ -781,131 +726,24 @@ export const CashAdvanceLiquidationSection: React.FC<CashAdvanceLiquidationSecti
         </div>
       </div>
 
-      {/* Request Form Toggle */}
-      {showRequestForm ? (
-        <div className="bg-white border border-slate-200 rounded p-6 shadow-sm space-y-5 animate-fade-in">
-          <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-            <h3 className="font-extrabold text-slate-950 font-display uppercase tracking-wider text-xs">Request Sales Cash Advance</h3>
-            <button onClick={() => setShowRequestForm(false)} aria-label="Close" className="text-gray-400 hover:text-gray-600">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {(() => {
-            const activeAdv = userAdvances.find(ca => ca.status !== CashAdvanceStatus.LIQUIDATED && ca.status !== CashAdvanceStatus.REJECTED);
-            const isOverdue = activeAdv && activeAdv.status === CashAdvanceStatus.RELEASED && activeAdv.releaseDate && (() => {
-              const releasedAt = new Date(activeAdv.releaseDate).getTime();
-              const deadlineMs = 7 * 24 * 60 * 60 * 1000;
-              return Date.now() > (releasedAt + deadlineMs);
-            })();
-
-            if (!activeAdv) return null;
-
-            return (
-              <div className="bg-red-50 border border-red-200 rounded p-3 text-xs text-red-700 font-semibold space-y-1">
-                <span className="block font-bold">Request Disabled:</span>
-                <span>You already have an active Cash Advance (CADV-{activeAdv.id.substring(0,6).toUpperCase()}) that is unliquidated.</span>
-                {isOverdue && (
-                  <span className="block text-red-800 font-bold">
-                    Your liquidation is overdue! Please file and resolve your current liquidation before filing a new advance request.
-                  </span>
-                )}
-              </div>
-            );
-          })()}
-
-          <form onSubmit={handleRequestAdvance} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-semibold text-gray-700 uppercase tracking-wider mb-1">
-                  Requested Amount (PHP ₱) *
-                </label>
-                <div className="relative rounded shadow-sm">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                    <span className="text-gray-500 text-sm">₱</span>
-                  </div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    disabled={userAdvances.some(ca => ca.status !== CashAdvanceStatus.LIQUIDATED && ca.status !== CashAdvanceStatus.REJECTED)}
-                    placeholder="0.00"
-                    value={advanceAmount}
-                    onChange={e => setAdvanceAmount(e.target.value)}
-                    className="block w-full border border-gray-300 rounded pl-7 pr-3 py-2 text-sm focus:border-brand focus:outline-none disabled:bg-slate-50 disabled:text-slate-400 font-semibold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-semibold text-gray-700 uppercase tracking-wider mb-1">
-                  Link completed Meeting
-                </label>
-                <select
-                  value={advanceMomId}
-                  disabled={userAdvances.some(ca => ca.status !== CashAdvanceStatus.LIQUIDATED && ca.status !== CashAdvanceStatus.REJECTED)}
-                  onChange={e => setAdvanceMomId(e.target.value)}
-                  className="block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-brand focus:outline-none disabled:bg-slate-50 disabled:text-slate-400 font-semibold"
-                >
-                  <option value="">-- No linked meeting (Optional) --</option>
-                  {moms.filter(m => m.status === MomStatus.COMPLETED).map(mom => (
-                    <option key={mom.id} value={mom.id}>
-                      {mom.client} - {mom.purpose} ({mom.meeting_date})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-semibold text-gray-700 uppercase tracking-wider mb-1">
-                Business Purpose *
-              </label>
-              <textarea
-                required
-                rows={3}
-                disabled={userAdvances.some(ca => ca.status !== CashAdvanceStatus.LIQUIDATED && ca.status !== CashAdvanceStatus.REJECTED)}
-                placeholder="Detail the sales activity, travel plans, client target, or specific commercial scope..."
-                value={advancePurpose}
-                onChange={e => setAdvancePurpose(e.target.value)}
-                className="block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-brand focus:outline-none disabled:bg-slate-50 disabled:text-slate-400 font-semibold"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => setShowRequestForm(false)}
-                className="bg-white border border-slate-300 text-slate-700 text-xs px-4 py-2 rounded font-bold hover:bg-slate-50 uppercase tracking-wider font-display"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submittingAdvance || userAdvances.some(ca => ca.status !== CashAdvanceStatus.LIQUIDATED && ca.status !== CashAdvanceStatus.REJECTED)}
-                className="corp-btn-primary"
-              >
-                Submit Request
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : (
-        <div className="flex justify-end gap-3">
-          <Link 
-            to="/claims/new"
-            className="corp-btn-primary px-4 py-2 rounded text-xs font-bold shadow-sm transition-all uppercase tracking-wider font-display flex items-center gap-1.5"
-          >
-            <Plus className="w-3.5 h-3.5" /> New Reimbursement
-          </Link>
-          <button
-            onClick={() => setShowRequestForm(true)}
-            className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded text-xs font-bold shadow-sm transition-all uppercase tracking-wider font-display flex items-center gap-1.5"
-          >
-            <Plus className="w-3.5 h-3.5" /> Request Cash Advance
-          </button>
-        </div>
-      )}
+      {/* Both actions route to the one canonical request form (SubmitClaim.tsx)
+          instead of this section keeping its own second Cash Advance form —
+          that used to mean two separate validation paths and two "active
+          advance" guards to keep in sync for the same POST /api/cash-advances. */}
+      <div className="flex justify-end gap-3">
+        <Link
+          to="/claims/new"
+          className="corp-btn-primary px-4 py-2 rounded text-xs font-bold shadow-sm transition-all uppercase tracking-wider font-display flex items-center gap-1.5"
+        >
+          <Plus className="w-3.5 h-3.5" /> New Reimbursement
+        </Link>
+        <Link
+          to="/claims/new?type=cash_advance"
+          className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded text-xs font-bold shadow-sm transition-all uppercase tracking-wider font-display flex items-center gap-1.5"
+        >
+          <Plus className="w-3.5 h-3.5" /> Request Cash Advance
+        </Link>
+      </div>
 
       {/* Recent request history - capped; full history lives on the Transaction
           History page, not duplicated here in full on the dashboard. */}
@@ -980,14 +818,14 @@ export const CashAdvanceLiquidationSection: React.FC<CashAdvanceLiquidationSecti
                             to="/claims/new"
                             className="corp-btn-primary text-[10px] px-3 py-1.5"
                           >
-                            Submit Claim
+                            New Reimbursement
                           </Link>
-                          <button
-                            onClick={() => setShowRequestForm(true)}
+                          <Link
+                            to="/claims/new?type=cash_advance"
                             className="bg-slate-800 text-white text-[10px] font-bold px-3 py-1.5 rounded uppercase font-display"
                           >
-                            Request Advance
-                          </button>
+                            Request Cash Advance
+                          </Link>
                         </div>
                       </div>
                     ) : (

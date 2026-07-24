@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../components/AuthContext';
-import { apiFetch } from '../lib/api';
 import { Claim, CashAdvance, Liquidation, User, UserRole } from '../types';
 import { RecentActivityTable } from '../components/dashboard/RecentActivityTable';
 import { MetricCard } from '../components/dashboard/MetricCard';
@@ -9,7 +8,8 @@ import { metricsForRole, MetricContext } from '../metrics/registry';
 import { DashboardPeriodProvider, useDashboardPeriod } from '../contexts/DashboardPeriodContext';
 import { PlusCircle, UserCircle, Wallet, X, DownloadSimple } from '@phosphor-icons/react';
 import { Pagination, usePagination } from '../components/Pagination';
-import Papa from 'papaparse';
+import { exportRequestsToCSV } from '../utils';
+import { useUnifiedRequestList } from '../hooks/useUnifiedRequestList';
 
 const PAGE_SIZE = 10;
 
@@ -64,11 +64,6 @@ export const MyRequests: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const statusFilter = searchParams.get('status');
   const typeFilter = searchParams.get('type');
-  const [claims, setClaims] = useState<Claim[]>([]);
-  const [cadvs, setCadvs] = useState<CashAdvance[]>([]);
-  const [liqs, setLiqs] = useState<Liquidation[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
   // Date-range filter + CSV export — merged in from the standalone
   // Transaction History page, which showed this same self-scoped data under
   // a second nav item with its own separate feature set. Approvers now have
@@ -76,60 +71,7 @@ export const MyRequests: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  useEffect(() => {
-    Promise.all([
-      apiFetch('/api/claims'),
-      apiFetch('/api/cash-advances'),
-      apiFetch('/api/liquidations'),
-      apiFetch('/api/users')
-    ]).then(([claimsData, cadvsData, liqsData, usersData]) => {
-      setClaims(claimsData);
-      setCadvs(cadvsData);
-      setLiqs(liqsData);
-      setUsers(usersData);
-      setLoading(false);
-    }).catch(console.error);
-  }, []);
-
-  // Computed unconditionally (before the loading/no-user return below) so
-  // usePagination, itself a hook, is never called conditionally. Guarded
-  // with user?.id so this is safe to evaluate before auth has loaded.
-  const usersById = new Map<string, User>(users.map(u => [u.id, u]));
-  const myItems = user ? [
-    ...claims.filter(c => c.requestor_id === user.id).map(c => ({
-      id: c.id,
-      reference: `REIM-${c.id.substring(0, 6)}`,
-      type: 'Reimbursement',
-      status: c.status,
-      amount: c.total_amount,
-      date: c.created_at,
-      path: `/claims/${c.id}`,
-      requestorName: usersById.get(c.requestor_id)?.name,
-      approverName: usersById.get(c.current_approver_id)?.name,
-    })),
-    ...cadvs.filter(c => c.requestorId === user.id).map(c => ({
-      id: c.id,
-      reference: `CADV-${c.id.substring(0, 6)}`,
-      type: 'Cash Advance',
-      status: c.status,
-      amount: c.amount,
-      date: c.createdAt,
-      path: `/cash-advances/${c.id}`,
-      requestorName: usersById.get(c.requestorId)?.name,
-      approverName: usersById.get(c.approverId)?.name,
-    })),
-    ...liqs.filter(l => l.requestorId === user.id).map(l => ({
-      id: l.id,
-      reference: `LIQ-${l.id.substring(0, 6)}`,
-      type: 'Liquidation',
-      status: l.status,
-      amount: l.totalSpent,
-      date: l.createdAt,
-      path: `/liquidations/${l.id}`,
-      requestorName: usersById.get(l.requestorId)?.name,
-      approverName: usersById.get((l as any).cashAdvance?.approverId)?.name,
-    }))
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : [];
+  const { items: myItems, loading, claims, cashAdvances, liquidations } = useUnifiedRequestList(user?.id);
 
   const availableStatuses = Array.from(new Set(myItems.map(i => i.status))).sort();
 
@@ -144,21 +86,7 @@ export const MyRequests: React.FC = () => {
   // everything into one indefinitely-scrolling table.
   const { currentPage, setPage, totalPages, paginatedItems, totalItems } = usePagination(filteredItems, PAGE_SIZE);
 
-  const handleExport = () => {
-    if (filteredItems.length === 0) return;
-    const csv = Papa.unparse(filteredItems.map(item => ({
-      Reference: item.reference,
-      Type: item.type,
-      Status: item.status,
-      Amount: item.amount,
-      Date: item.date ? item.date.substring(0, 10) : ''
-    })));
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'my_requests.csv';
-    link.click();
-  };
+  const handleExport = () => exportRequestsToCSV(filteredItems, 'my_requests.csv');
 
   if (loading || !user) {
     return (
@@ -196,13 +124,13 @@ export const MyRequests: React.FC = () => {
             to="/claims/new"
             className="corp-btn-primary flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold"
           >
-            <PlusCircle className="w-4 h-4" /> New Request
+            <PlusCircle className="w-4 h-4" /> New Reimbursement
           </Link>
         </div>
       </div>
 
       <DashboardPeriodProvider>
-        <MyRequestsKPIs user={user} claims={claims} cadvs={cadvs} liqs={liqs} />
+        <MyRequestsKPIs user={user} claims={claims} cadvs={cashAdvances} liqs={liquidations} />
       </DashboardPeriodProvider>
 
       <div className="flex flex-wrap items-center gap-2">

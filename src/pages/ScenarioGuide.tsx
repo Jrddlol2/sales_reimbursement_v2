@@ -32,7 +32,7 @@ export const ScenarioGuide: React.FC = () => {
       description: "An Approver cannot approve their own claim to prevent conflicts of interest and maintain financial compliance.",
       rolesInvolved: ["Bob Santos (Approver)", "Ivy Senior (VP)"],
       steps: [
-        "Switch to Bob Santos (bob@mgenesis.com) and go to 'New Request' to submit a claim of his own.",
+        "Switch to Bob Santos (bob@mgenesis.com) and go to 'New Reimbursement' to submit a claim of his own.",
         "Because claim routing always resolves to the submitter's own manager (never to the submitter), Bob's claim routes to Ivy Salazar, not to Bob himself — self-approval can't occur through normal submission.",
         "As defense-in-depth, the server also rejects any approval attempt where the acting user matches the claim's requestor, regardless of how the claim got routed to them."
       ],

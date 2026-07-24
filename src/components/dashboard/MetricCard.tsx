@@ -16,7 +16,7 @@ const iconForFormat = (format: MetricDefinition['format']): Icon => {
   }
 };
 
-const formatValue = (value: number | string, format: MetricDefinition['format']): string => {
+export const formatMetricValue = (value: number | string, format: MetricDefinition['format']): string => {
   if (typeof value === 'string') return value;
   switch (format) {
     case 'currency': return formatPHP(value);
@@ -48,7 +48,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   return (
     <KPICard
       title={metric.label}
-      value={formatValue(value, metric.format)}
+      value={formatMetricValue(value, metric.format)}
       icon={metric.icon || iconForFormat(metric.format)}
       variant={metric.variant}
       description={metric.description}

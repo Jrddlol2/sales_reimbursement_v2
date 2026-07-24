@@ -8,12 +8,13 @@ import { DashboardPeriodFilter } from './DashboardPeriodFilter';
 import { DashboardHeader } from './DashboardHeader';
 import { QuickActionsCard } from './QuickActionsCard';
 import { AnalyticsCard } from './AnalyticsCard';
-import { SimpleLineChart, DonutChart } from './AnalyticsCharts';
-import { Users, FileText, Envelope, ShieldCheck, ChartBar, Briefcase, HardDrives, Gear, Archive, ArrowRight, Lifebuoy, Warning, Clock as ClockIcon } from '@phosphor-icons/react';
-import { formatPHP, getClaimNumber } from '../../utils';
+import { DonutChart } from './AnalyticsCharts';
+import { Users, FileText, Envelope, ShieldCheck, ChartBar, HardDrives, Archive, ArrowRight, Lifebuoy, Warning, Clock as ClockIcon } from '@phosphor-icons/react';
+import { formatPHP, formatDateTime, getClaimNumber } from '../../utils';
 import { metricsForRole, MetricContext } from '../../metrics/registry';
+import { formatMetricValue } from './MetricCard';
 import { useDashboardPeriod } from '../../contexts/DashboardPeriodContext';
-import { resolveScope } from '../../metrics/timeScope';
+import { resolveScope, scopeLabel } from '../../metrics/timeScope';
 import { StatusBadge } from '../StatusBadge';
 
 // Shared by both the Executive and System Admin views — the "who moved what"
@@ -44,7 +45,7 @@ const RecentActivityFeed: React.FC<{ items: any[] }> = ({ items }) => (
               </p>
               <StatusBadge status={log.new_status} size="sm" />
             </div>
-            <span className="text-[10px] text-slate-400 font-semibold shrink-0">{new Date(log.timestamp).toLocaleString()}</span>
+            <span className="text-[10px] text-slate-400 font-semibold shrink-0">{formatDateTime(log.timestamp)}</span>
           </div>
         );
       })
@@ -119,31 +120,6 @@ export const AdminDashboard: React.FC<{ user: User }> = ({ user }) => {
       </div>
     );
   }
-
-  // --- EXECUTIVE KPIs & DATA ---
-  const completedClaims = claims.filter(c => c.status === ClaimStatus.COMPLETED);
-
-  // Annual Trends — Last 12 Months, monthly granularity (per spec).
-  const monthlyExpenseData = () => {
-    const months = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const monthName = d.toLocaleString('default', { month: 'short' });
-      const year = d.getFullYear();
-
-      const monthClaims = completedClaims.filter(c => {
-        const cd = new Date(c.created_at);
-        return cd.getMonth() === d.getMonth() && cd.getFullYear() === year;
-      });
-
-      months.push({
-        name: monthName,
-        'Amount': monthClaims.reduce((acc, c) => acc + c.total_amount, 0)
-      });
-    }
-    return months;
-  };
 
   // --- ADMIN KPIs & DATA ---
   const todayHistory = history.filter(h => {
@@ -249,14 +225,11 @@ export const AdminDashboard: React.FC<{ user: User }> = ({ user }) => {
 
       {view === 'executive' ? (
         <>
-          <div className="bg-brand text-white p-6 rounded-xl mb-8 shadow-sm flex items-center justify-between relative overflow-hidden">
-            <div className="relative z-10">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <ChartBar className="w-6 h-6" /> Executive Overview
-              </h2>
-              <p className="text-white/80 mt-1">Enterprise performance, financial summaries, and claim analytics — each figure scoped to its own period</p>
-            </div>
-            <Briefcase className="w-24 h-24 text-white opacity-10 absolute -right-2 -bottom-4 transform -rotate-12" weight="fill" />
+          <div className="mb-8">
+            <h2 className="text-lg font-bold text-slate-800 mb-1 flex items-center gap-2">
+              <ChartBar className="w-4 h-4 text-brand" /> Executive Overview
+            </h2>
+            <p className="text-sm text-slate-500">Enterprise performance, financial summaries, and claim analytics — each figure scoped to its own period</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -290,30 +263,26 @@ export const AdminDashboard: React.FC<{ user: User }> = ({ user }) => {
             <RecentActivityFeed items={recentSystemActivity} />
           </div>
 
-          {/* Only the headline trend chart lives here — category breakdowns
-              and department comparisons moved to /reporting so the same
-              analysis isn't duplicated in two places with two different
-              scopes. This card is the on-ramp to that deeper view. */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <div className="lg:col-span-2">
-              <AnalyticsCard title="Annual Trends (Last 12 Months)">
-                <SimpleLineChart data={monthlyExpenseData()} dataKey="Amount" name="Expenses (PHP)" />
-              </AnalyticsCard>
-            </div>
-            <Link
-              to="/reporting"
-              className="corp-card p-6 flex flex-col justify-between hover:border-slate-300 hover:shadow-md transition-all group"
-            >
+          {/* No trend chart on this dashboard — /reporting owns every trend,
+              category, and department view (including its own monthly spend
+              trend, scoped to whatever date window the admin picks there),
+              so this stays a single on-ramp card instead of a second,
+              fixed-12-month copy of the same analysis. */}
+          <Link
+            to="/reporting"
+            className="corp-card p-6 flex items-center justify-between gap-4 hover:border-slate-300 hover:shadow-md transition-all group mb-8"
+          >
+            <div className="flex items-center gap-4">
+              <ChartBar className="w-8 h-8 text-brand shrink-0" weight="duotone" />
               <div>
-                <ChartBar className="w-8 h-8 text-brand mb-3" weight="duotone" />
                 <h3 className="text-sm font-bold text-slate-900 mb-1">Full Analytics Report</h3>
-                <p className="text-xs text-slate-500 leading-relaxed">Category breakdowns, department comparisons, and claim volume — the deep-dive view.</p>
+                <p className="text-xs text-slate-500 leading-relaxed">Spend trends, category breakdowns, department comparisons, and claim volume — the deep-dive view.</p>
               </div>
-              <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-brand group-hover:gap-1.5 transition-all">
-                View Full Report <ArrowRight size={14} weight="bold" />
-              </span>
-            </Link>
-          </div>
+            </div>
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-brand group-hover:gap-1.5 transition-all shrink-0">
+              View Full Report <ArrowRight size={14} weight="bold" />
+            </span>
+          </Link>
 
           {/* All-Time stats — visually separated (grey, no period filter applies) so
               they're never confused with the operational metrics above. */}
@@ -331,14 +300,11 @@ export const AdminDashboard: React.FC<{ user: User }> = ({ user }) => {
         </>
       ) : (
         <>
-          <div className="bg-slate-800 text-white p-6 rounded-xl mb-8 shadow-sm flex items-center justify-between relative overflow-hidden">
-            <div className="relative z-10">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <HardDrives className="w-6 h-6 text-slate-400" /> System Administration
-              </h2>
-              <p className="text-slate-300 mt-1">Operational health, system management, and access controls</p>
-            </div>
-            <Gear className="w-24 h-24 text-slate-100 opacity-5 absolute -right-2 -bottom-4 animate-[spin_20s_linear_infinite]" weight="fill" />
+          <div className="mb-8">
+            <h2 className="text-lg font-bold text-slate-800 mb-1 flex items-center gap-2">
+              <HardDrives className="w-4 h-4 text-slate-500" /> System Administration
+            </h2>
+            <p className="text-sm text-slate-500">Operational health, system management, and access controls</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -375,17 +341,18 @@ export const AdminDashboard: React.FC<{ user: User }> = ({ user }) => {
             </div>
             <p className="text-sm text-slate-500 mb-4">Custodian disbursement oversight — Admin cannot process payments</p>
 
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Right Now</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-              {adminPaymentRightNow.map(metric => (
-                <MetricCard key={metric.id} metric={metric} ctx={ctx} scope={effectiveScope(metric)} value={metric.compute(ctx, resolveMetricRange(metric))} />
-              ))}
-            </div>
-
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">This Period</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {adminPaymentThisPeriod.map(metric => (
-                <MetricCard key={metric.id} metric={metric} ctx={ctx} scope={effectiveScope(metric)} value={metric.compute(ctx, resolveMetricRange(metric))} />
+            {/* Compact read-only strip, not a second operational console —
+                same numbers Custodian's own dashboard shows, at a glance
+                rather than as a full second set of KPI cards. */}
+            <div className="corp-card px-5 py-4 flex flex-wrap gap-x-8 gap-y-4">
+              {[...adminPaymentRightNow, ...adminPaymentThisPeriod].map(metric => (
+                <div key={metric.id} className="min-w-[110px]">
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">{metric.label}</div>
+                  <div className="text-base font-extrabold text-slate-800 mt-0.5 tabular-nums">
+                    {formatMetricValue(metric.compute(ctx, resolveMetricRange(metric)), metric.format)}
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{metric.realtime ? 'Live' : scopeLabel(effectiveScope(metric))}</div>
+                </div>
               ))}
             </div>
           </div>
