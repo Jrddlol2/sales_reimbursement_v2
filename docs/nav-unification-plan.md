@@ -1,8 +1,9 @@
 # Navigation / Module Unification — Refactor Plan
 
-> Status: **Phases 0–3 done; Phases 4–5 not started.** This document is the
-> agreed plan of record from the nav/module audit. Do the phases in order; each
-> phase must leave the app fully working before the next begins.
+> Status: **Phases 0–3 done and shipped on `nav-module-unification`. Phase 4
+> reviewed → not needed. Phase 5 reviewed → deferred.** Phases 0–3 are the
+> shippable unit. See the Phase 4 / Phase 5 sections for why the remaining two
+> were closed out rather than implemented.
 
 ## Guiding constraints (from CLAUDE.md)
 
@@ -113,36 +114,52 @@ relabeling. Split it into real routes.
 
 ---
 
-## Phase 4 — nav config + `ProtectedRoute` simplification
+## Phase 4 — nav config + `ProtectedRoute` simplification — REVIEWED, NOT NEEDED
 
-Now that Settings is split and lists are unified:
+Traced the three targets before implementing; all three turned out to be
+intentional/load-bearing, so Phase 4 was closed out rather than executed.
 
-- [ ] Collapse duplicate `navItems` entries — Ready to Claim currently has two
-      rows (`Layout.tsx:14` PRIMARY, `Layout.tsx:28` MY REQUESTS) purely for the
-      per-role group difference.
-- [ ] Drop `ProtectedRoute`'s "a path can appear more than once" special-case
-      (`src/App.tsx:97`) and the hardcoded `/claims/new` branch
-      (`src/App.tsx:78`), once the duplicate entry is gone.
-- [ ] Gating becomes a clean `roles.includes(user.role)` against one nav config.
-      (Detail routes at `src/App.tsx:82` already model the target pattern.)
+1. **Duplicate "Ready to Claim" nav rows** (`Layout.tsx`, PRIMARY for Requestor
+   vs MY REQUESTS for Approver) are *not* accidental — the entry sits under a
+   different, role-appropriate heading per role. The Approver's `MY REQUESTS`
+   group deliberately separates their own-requestor activity from their approval
+   duties. Collapsing to one row forces a single group and degrades one role's
+   sidebar. The two-row form is the honest representation.
+2. **`ProtectedRoute`'s `.filter().some()`** over matching nav items is robust
+   correct handling, not a special-case branch — it works for one *or* many
+   matching rows. Nothing to remove.
+3. **The hardcoded `/claims/new` branch** encodes access ≠ nav-visibility: an
+   Approver can submit claims (via the My Requests button) but the route is
+   deliberately absent from their sidebar. Removing the branch would bounce
+   Approvers from their own submit action unless we re-expose the route in nav
+   (undoing the intentional hide) or add an access-vs-visibility field (more
+   machinery, not less).
 
-**Verify:** each role sees exactly its intended nav; direct-URL access to a
-disallowed route still bounces to the role home page.
+Net: the only "true" simplification is deleting ~2 lines of duplicate nav config
+at the cost of a slightly worse sidebar. Not worth it. Left as-is.
 
 ---
 
-## Phase 5 — R2: merge the two queues (DEFERRED / optional)
+## Phase 5 — R2: merge the two queues — REVIEWED, DEFERRED
 
 `ApprovalQueue` (page + embedded in the Approver dashboard) + `ProcessingQueue`
-→ one `WorkQueue` shell, role-gated actions.
+→ one `WorkQueue` shell, role-gated actions. Re-evaluated after Phase 1; decided
+to defer.
 
-- **Highest risk.** These are the most behavior-dense files: optimistic hides,
-  release-code generation, bulk approve/reject, org-change transfers, review
-  meetings.
-- Treat as a **separate decision after Phases 0–4 land**, not part of the same
-  push.
-- May not be worth it: the shared `RequestTable` from Phase 1 likely already
-  removes most of the visible duplication. Re-evaluate then.
+- The two pages only *look* alike (tabbed worklist: act-now / sub-category /
+  history). Their actual action logic barely overlaps:
+  - Approver: approve/reject/return, **bulk approve**, review-meeting
+    confirm/decline, **org-change approver transfer**, high-value flags,
+    returned-to-self items.
+  - Custodian: **generate/regenerate release code**, mark ready-to-claim,
+    release funds, collect refund, payment channel, aging.
+- A `WorkQueue` shell would still carry two large role-specific action modules;
+  the genuinely shared part (tab bar, KPI row, card/row layout) was **already
+  extracted as `RequestTable` in Phase 1**.
+- So the merge would put the two most behavior-dense, money-moving files in the
+  app through a high-risk rewrite for a small remaining DRY win. Risk/reward is
+  poor. **Deferred** — revisit only if these pages need a substantial rework for
+  another reason.
 
 ---
 
